@@ -25,7 +25,8 @@ trap 'rm -rf "$BUILD"' EXIT
 mkdir -p "$BUILD/ahm-connect"
 cp ahm-connect.php "$BUILD/ahm-connect/"
 
-rm -f ahm-connect.zip
-(cd "$BUILD" && zip -qr - ahm-connect) > ahm-connect.zip
+mkdir -p dist
+rm -f dist/ahm-connect.zip
+(cd "$BUILD" && zip -qr - ahm-connect) > dist/ahm-connect.zip
 
-echo "ahm-connect.zip listo — v$VERSION_HEADER ($(du -h ahm-connect.zip | cut -f1))"
+echo "ahm-connect.zip listo — v$VERSION_HEADER ($(du -h dist/ahm-connect.zip | cut -f1))"

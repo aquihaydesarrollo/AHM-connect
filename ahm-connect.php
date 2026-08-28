@@ -4,7 +4,7 @@
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
  * Version:     3.6.0
- * Update URI:  https://github.com/aquihaydesarrollo/ahm-connect
+ * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
  * License:     GPL-2.0+
@@ -4677,7 +4677,7 @@ remove_action( 'wp_head', 'wp_generator' );
 // RMAI_UPDATE_MANIFEST en wp-config.php (útil para probar en staging).
 
 if ( ! defined( 'RMAI_UPDATE_MANIFEST' ) ) {
-    define( 'RMAI_UPDATE_MANIFEST', 'https://raw.githubusercontent.com/aquihaydesarrollo/ahm-connect/main/ahm-connect.json' );
+    define( 'RMAI_UPDATE_MANIFEST', 'https://raw.githubusercontent.com/aquihaydesarrollo/AHM-connect/main/ahm-connect.json' );
 }
 
 define( 'RMAI_UPDATE_TRANSIENT', 'rmai_update_manifest' );

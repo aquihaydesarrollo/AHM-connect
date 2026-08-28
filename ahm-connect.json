@@ -1,0 +1,16 @@
+{
+  "name": "AHM Connect",
+  "slug": "ahm-connect",
+  "version": "3.6.0",
+  "author": "<a href=\"https://aquihaymarketing.es\">Aquí Hay Marketing</a>",
+  "homepage": "https://github.com/aquihaydesarrollo/ahm-connect",
+  "requires": "6.0",
+  "requires_php": "7.4",
+  "tested": "6.8",
+  "last_updated": "2026-08-28 12:00:00",
+  "download_url": "https://github.com/aquihaydesarrollo/ahm-connect/releases/download/v3.6.0/ahm-connect.zip",
+  "sections": {
+    "description": "API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.",
+    "changelog": "<h4>3.6.0</h4><ul><li>Actualizaciones automáticas: el plugin se actualiza desde el escritorio de WordPress, sin subir el zip a mano.</li><li>POST /post/{id}/meta valida el JSON antes de escribir en claves como <code>_elementor_data</code>. Un JSON roto ya no deja la plantilla sin renderizar.</li><li>POST /post/{id}/meta verifica la escritura releyendo el valor. Si no coincide con lo enviado, revierte al valor anterior y devuelve error en vez de dejar datos corruptos.</li><li>Corregida la pérdida de barras invertidas al guardar <code>_product_attributes</code> y <code>_ahm_jsonld</code>.</li><li>Las respuestas de la API mandan cabeceras anti-caché, para que LiteSpeed y compañía no sirvan lecturas obsoletas.</li></ul>"
+  }
+}

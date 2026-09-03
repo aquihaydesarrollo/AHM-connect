@@ -1,6 +1,8 @@
 # ═══════════════════════════════════════════════════════════════
-# AHM HARDENING — pegar dentro del .htaccess raíz de aquihaymarketing.es
-# ANTES del bloque "# BEGIN WordPress". Hacer backup del .htaccess actual.
+# AHM HARDENING — plantilla. Pegar en el .htaccess raíz del sitio destino,
+# FUERA de los marcadores "# BEGIN WordPress" / "# END WordPress" (si no,
+# WordPress lo borra al regenerar los enlaces permanentes).
+# Hacer backup del .htaccess actual antes de tocarlo.
 # ═══════════════════════════════════════════════════════════════
 
 # --- Bloquear ficheros que filtran versión / son sensibles ---
@@ -14,9 +16,22 @@
 </Files>
 
 # --- Cabeceras de seguridad (cubre también ficheros estáticos) ---
+#
+# OJO CON EL FRAMING. Si el sitio se integra con un portal de compras externo
+# (PunchOut cXML/OCI: SAP Ariba, Coupa, Jaggaer…), ese portal abre el catálogo
+# DENTRO DE UN IFRAME y "X-Frame-Options: SAMEORIGIN" se lo impide: el navegador
+# descarga la página — 200 en el log — pero se niega a pintarla, y el comprador
+# ve una pantalla en blanco. X-Frame-Options no admite lista blanca (ALLOW-FROM
+# está obsoleto), así que en esos sitios hay que SUSTITUIRLO por la CSP de abajo,
+# nunca poner las dos: algunos navegadores priorizan X-Frame-Options.
+#
+#     Header always unset X-Frame-Options
+#     Header always set Content-Security-Policy "frame-ancestors 'self' https://*.ariba.com"
+#
 <IfModule mod_headers.c>
     Header always set X-Content-Type-Options "nosniff"
     Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Content-Security-Policy "frame-ancestors 'self'"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" env=HTTPS

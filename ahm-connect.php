@@ -4603,7 +4603,29 @@ function rmai_security_headers(): void {
     header_remove( 'X-Powered-By' );
 
     header( 'X-Content-Type-Options: nosniff' );
-    header( 'X-Frame-Options: SAMEORIGIN' );
+
+    /**
+     * Orígenes externos autorizados a enmarcar el sitio.
+     *
+     * Vacío (por defecto) = solo el propio dominio. Los sitios que se integran
+     * con un portal de compras externo (PunchOut cXML/OCI: SAP Ariba, Coupa,
+     * Jaggaer…) necesitan que ese portal pueda enmarcarlos, p. ej.:
+     *
+     *     add_filter( 'ahm_frame_ancestors', fn( $o ) => array_merge( $o, [ 'https://*.ariba.com' ] ) );
+     *
+     * @param string[] $ancestors Orígenes con esquema, admiten comodín de subdominio.
+     */
+    $ancestors = array_filter( array_map( 'trim', (array) apply_filters( 'ahm_frame_ancestors', array() ) ) );
+
+    if ( $ancestors ) {
+        // X-Frame-Options no admite lista blanca (ALLOW-FROM está obsoleto) y
+        // algunos navegadores lo priorizan sobre la CSP, así que no se envía.
+        header( "Content-Security-Policy: frame-ancestors 'self' " . implode( ' ', $ancestors ) );
+    } else {
+        header( 'X-Frame-Options: SAMEORIGIN' );
+        header( "Content-Security-Policy: frame-ancestors 'self'" );
+    }
+
     header( 'Referrer-Policy: strict-origin-when-cross-origin' );
     header( 'Permissions-Policy: geolocation=(), microphone=(), camera=()' );
     if ( is_ssl() ) {

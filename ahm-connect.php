@@ -1840,8 +1840,33 @@ function rmai_create_post( WP_REST_Request $request ) {
     }
 
     $allowed_types = array_keys( get_post_types( [ 'public' => true ] ) );
-    $post_type     = isset( $body['post_type'] ) && in_array( $body['post_type'], $allowed_types, true )
-        ? $body['post_type'] : 'post';
+
+    /**
+     * Permite habilitar tipos de contenido no públicos (elementor_snippet,
+     * elementor_library...) de forma explícita desde el tema o un mu-plugin.
+     *
+     * @param string[] $allowed_types Tipos que /create-post puede crear.
+     */
+    $allowed_types = (array) apply_filters( 'ahm_connect_creatable_post_types', $allowed_types );
+
+    $requested_type = isset( $body['post_type'] ) ? sanitize_key( (string) $body['post_type'] ) : 'post';
+
+    // Antes, un tipo no permitido caía en silencio a 'post': la respuesta era
+    // success y el cliente creía haber creado un elementor_snippet cuando en
+    // realidad tenía una entrada normal. Mejor fallar de forma visible.
+    if ( ! in_array( $requested_type, $allowed_types, true ) ) {
+        return new WP_Error(
+            'rmai_invalid_post_type',
+            sprintf(
+                'El tipo de contenido "%s" no está permitido. Permitidos: %s. Para habilitar otros, usa el filtro ahm_connect_creatable_post_types.',
+                $requested_type,
+                implode( ', ', $allowed_types )
+            ),
+            [ 'status' => 400 ]
+        );
+    }
+
+    $post_type = $requested_type;
 
     $post_data = [
         'post_title'   => sanitize_text_field( $body['title'] ),

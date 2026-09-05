@@ -1734,7 +1734,7 @@ function rmai_set_post_meta( WP_REST_Request $request ) {
     // (barras invertidas comidas, sanitización de terceros, etc.) se revierte en
     // lugar de dejar el contenido corrupto.
     $stored = get_post_meta( $post->ID, $key, true );
-    if ( ! rmai_meta_values_match( $value, $stored ) ) {
+    if ( ! rmai_meta_values_match( $value, $stored, $key ) ) {
         if ( $existed ) {
             update_post_meta( $post->ID, $key, wp_slash( $previous ) );
         } else {
@@ -1765,9 +1765,36 @@ function rmai_meta_expects_json( string $key ): bool {
 }
 
 /** Compara lo enviado con lo leído de vuelta sin falsos positivos de tipo. */
-function rmai_meta_values_match( $sent, $stored ): bool {
+function rmai_meta_values_match( $sent, $stored, string $key = '' ): bool {
     if ( is_string( $sent ) ) {
-        return is_scalar( $stored ) && (string) $stored === $sent;
+        if ( ! is_scalar( $stored ) ) {
+            return false;
+        }
+        if ( (string) $stored === $sent ) {
+            return true;
+        }
+        // Mismo dato, distinta serialización. Elementor renormaliza el JSON al
+        // guardarlo: escapa las barras ("\/") y escribe los flotantes con la
+        // precisión de PHP (16.199999999999999 donde el cliente envió 16.2).
+        // Comparar bytes daba un falso fallo y revertía escrituras correctas,
+        // así que cualquier cliente que parsee y reserialice el JSON —lo normal—
+        // no podía escribir. Se comparan las estructuras decodificadas.
+        //
+        // Ojo: esto NO relaja la verificación. Si el contenido cambió de verdad
+        // (kses eliminando un <script>, por ejemplo) las estructuras difieren y
+        // la comprobación sigue fallando, que es justo lo que debe pasar.
+        if ( '' !== $key && rmai_meta_expects_json( $key ) ) {
+            $a = json_decode( $sent, true );
+            if ( JSON_ERROR_NONE !== json_last_error() ) {
+                return false;
+            }
+            $b = json_decode( (string) $stored, true );
+            if ( JSON_ERROR_NONE !== json_last_error() ) {
+                return false;
+            }
+            return $a == $b; // phpcs:ignore WordPress.PHP.StrictComparisons
+        }
+        return false;
     }
     if ( is_array( $sent ) ) {
         return is_array( $stored ) && $stored == $sent; // phpcs:ignore WordPress.PHP.StrictComparisons

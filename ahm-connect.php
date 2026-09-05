@@ -3,7 +3,7 @@
  * Plugin Name: AHM Connect
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
- * Version:     3.6.0
+ * Version:     3.7.0
  * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RMAI_VERSION',         '3.6.0' );
+define( 'RMAI_VERSION',         '3.7.0' );
 define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );
@@ -1291,8 +1291,46 @@ function rmai_check_permission( WP_REST_Request $request ) {
     }
 
     rmai_no_cache();
+    rmai_maybe_assume_user();
     rmai_log( $request, 200, $ip );
     return true;
+}
+
+/**
+ * Ejecuta la petición como un usuario de WordPress, si el sitio lo ha
+ * habilitado de forma explícita en wp-config.php.
+ *
+ * Por defecto la API escribe sin identidad (usuario 0). Eso es seguro, pero
+ * tiene un efecto secundario poco evidente: Elementor trata cada escritura como
+ * no fiable porque nadie tiene la capacidad unfiltered_html, así que a
+ * _elementor_data le pasa kses —se come <script> y <style>— y además decodifica
+ * y recodifica el JSON, cambiando el escapado de las barras y la precisión de
+ * los flotantes. De ahí venían tanto el filtrado de código como los
+ * rmai_meta_roundtrip_failed al escribir el árbol de Elementor.
+ *
+ * Asumir una identidad amplía de verdad lo que puede hacer quien tenga la
+ * clave, así que no basta con tener la clave: hay que definir la constante en
+ * wp-config.php, es decir, tener acceso al servidor. Si el usuario indicado es
+ * administrador, la clave podrá inyectar HTML y JavaScript arbitrarios; elige
+ * el rol más bajo que te sirva y rota la clave si la compartes.
+ *
+ *     define( 'AHM_CONNECT_ACT_AS_USER', 12 ); // ID del usuario de WordPress
+ *
+ * wp_set_current_user() dispara la acción set_current_user, a la que WordPress
+ * engancha kses_init(), de modo que los filtros de kses se recalculan con las
+ * capacidades del nuevo usuario. Por eso funciona hacerlo aquí.
+ */
+function rmai_maybe_assume_user(): void {
+    if ( ! defined( 'AHM_CONNECT_ACT_AS_USER' ) ) {
+        return;
+    }
+
+    $user_id = (int) AHM_CONNECT_ACT_AS_USER;
+    if ( $user_id <= 0 || ! get_user_by( 'id', $user_id ) ) {
+        return;
+    }
+
+    wp_set_current_user( $user_id );
 }
 
 /**

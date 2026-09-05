@@ -1121,6 +1121,14 @@ function rmai_register_routes(): void {
             'callback'            => 'rmai_update_post_seo',
             'permission_callback' => $perm,
         ],
+        [
+            'methods'             => WP_REST_Server::DELETABLE,
+            'callback'            => 'rmai_delete_post',
+            'permission_callback' => $perm,
+            'args'                => [
+                'force' => [ 'default' => false, 'sanitize_callback' => 'rest_sanitize_boolean' ],
+            ],
+        ],
     ] );
 
     register_rest_route( RMAI_NAMESPACE, '/bulk-update', [
@@ -1530,6 +1538,28 @@ function rmai_update_post_seo( WP_REST_Request $request ) {
     $updated   = [];
     $ignored   = [];
 
+    // El estado no es una meta de SEO, es una columna de la entrada. Sin esto
+    // no había forma de despublicar ni de mandar a la papelera desde la API:
+    // se creaba contenido de prueba que luego solo se podía borrar a mano.
+    if ( isset( $body['status'] ) ) {
+        $estados_validos = [ 'publish', 'draft', 'pending', 'private', 'trash' ];
+        $estado          = sanitize_key( (string) $body['status'] );
+        if ( ! in_array( $estado, $estados_validos, true ) ) {
+            return new WP_Error(
+                'rmai_invalid_status',
+                sprintf( 'Estado "%s" no válido. Permitidos: %s.', $estado, implode( ', ', $estados_validos ) ),
+                [ 'status' => 400 ]
+            );
+        }
+        if ( 'trash' === $estado ) {
+            wp_trash_post( $post->ID );
+        } else {
+            wp_update_post( [ 'ID' => $post->ID, 'post_status' => $estado ], true );
+        }
+        $updated[] = 'status';
+        unset( $body['status'] );
+    }
+
     foreach ( $body as $key => $value ) {
         if ( ! array_key_exists( $key, $field_map ) ) {
             $ignored[] = $key;
@@ -1545,6 +1575,33 @@ function rmai_update_post_seo( WP_REST_Request $request ) {
         'updated' => $updated,
         'ignored' => $ignored,
         'seo'     => rmai_read_seo_data( $post->ID ),
+    ], 200 );
+}
+
+/**
+ * DELETE /post/{id}
+ *
+ * Por defecto manda a la papelera, que es reversible. Con ?force=true borra de
+ * forma permanente. Sin este endpoint, cualquier contenido creado por error
+ * desde la API se quedaba para siempre y había que entrar al wp-admin.
+ */
+function rmai_delete_post( WP_REST_Request $request ) {
+    $post = get_post( (int) $request->get_param( 'id' ) );
+    if ( ! $post ) {
+        return new WP_Error( 'rmai_not_found', 'Entrada no encontrada.', [ 'status' => 404 ] );
+    }
+
+    $force = (bool) $request->get_param( 'force' );
+    $res   = $force ? wp_delete_post( $post->ID, true ) : wp_trash_post( $post->ID );
+
+    if ( ! $res ) {
+        return new WP_Error( 'rmai_delete_failed', 'WordPress no pudo borrar la entrada.', [ 'status' => 500 ] );
+    }
+
+    return new WP_REST_Response( [
+        'success'   => true,
+        'post_id'   => $post->ID,
+        'permanent' => $force,
     ], 200 );
 }
 

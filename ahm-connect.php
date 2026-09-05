@@ -1747,6 +1747,8 @@ function rmai_set_post_meta( WP_REST_Request $request ) {
         );
     }
 
+    rmai_flush_elementor_caches( $post->ID, $key );
+
     return new WP_REST_Response( [
         'success'  => true,
         'post_id'  => $post->ID,
@@ -1754,6 +1756,34 @@ function rmai_set_post_meta( WP_REST_Request $request ) {
         'verified' => true,
         'stored'   => $stored,
     ], 200 );
+}
+
+/**
+ * Invalida las cachés de Elementor tras escribir una clave que afecta al render.
+ *
+ * Elementor guarda el HTML ya renderizado en _elementor_element_cache y el CSS
+ * generado en un archivo referenciado por _elementor_css. Ninguna de las dos se
+ * entera de que hemos escrito por API: la escritura es correcta, la verificación
+ * pasa, y la web sigue sirviendo la versión anterior. Parece que la API no
+ * funciona cuando en realidad lo que falla es la caché.
+ */
+function rmai_flush_elementor_caches( int $post_id, string $key ): void {
+    $claves_de_render = [
+        '_elementor_data',
+        '_elementor_page_settings',
+        '_elementor_controls_usage',
+    ];
+    if ( ! in_array( $key, $claves_de_render, true ) ) {
+        return;
+    }
+
+    // El HTML cacheado del documento.
+    delete_post_meta( $post_id, '_elementor_element_cache' );
+
+    // El CSS generado. Al borrar la meta, Elementor lo regenera en el siguiente
+    // render. Se prefiere esto a llamar a su API interna, que cambia entre
+    // versiones mayores.
+    delete_post_meta( $post_id, '_elementor_css' );
 }
 
 /** Claves cuyo valor debe ser un blob JSON parseable. */

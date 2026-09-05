@@ -91,6 +91,34 @@ hay que subirles `dist/ahm-connect.zip` una vez a mano. Ver [RELEASING.md](RELEA
 
 ---
 
+### Identidad de las peticiones (`AHM_CONNECT_ACT_AS_USER`)
+
+Por defecto la API escribe **sin identidad de usuario**. Es lo más seguro, pero
+tiene una consecuencia que conviene conocer: como nadie tiene la capacidad
+`unfiltered_html`, Elementor considera cada escritura no fiable y sobre
+`_elementor_data` hace dos cosas:
+
+- le pasa `kses`, que elimina `<script>` y `<style>`;
+- decodifica y recodifica el JSON, cambiando el escapado de las barras y la
+  precisión de los flotantes.
+
+Por eso, con la configuración por defecto, **no se puede instalar código ni
+escribir de forma fiable el árbol de Elementor** desde la API.
+
+Si necesitas hacerlo, define la constante en `wp-config.php` (no hay ajuste en
+el panel a propósito: se exige acceso al servidor, para que la clave de API por
+sí sola nunca pueda elevar privilegios):
+
+```php
+define( 'AHM_CONNECT_ACT_AS_USER', 12 ); // ID del usuario de WordPress
+```
+
+> ⚠️ Si el usuario indicado es administrador, quien tenga la clave podrá
+> inyectar HTML y JavaScript arbitrarios en el sitio. Usa el rol más bajo que te
+> sirva y rota la clave si la has compartido.
+
+---
+
 ## 4. Reglas de escritura — Elementor
 
 > **Regla absoluta:** si una página está construida con Elementor, el plugin NUNCA modifica `post_content` ni `post_excerpt`. Los cambios de diseño en Elementor se hacen siempre manualmente desde el editor de Elementor.
@@ -145,7 +173,22 @@ Actualiza campos SEO de Rank Math.
 
 **Body JSON:** cualquier combinación de campos del [mapa de campos](#12-campos-seo-de-rank-math-soportados).
 
+Acepta además `status`, que no es un campo SEO sino el estado de la entrada:
+`publish`, `draft`, `pending`, `private` o `trash`. Un valor no válido devuelve
+`400 rmai_invalid_status`.
+
 **Respuesta:** `success`, `post_id`, `updated[]`, `ignored[]`, `seo{}`.
+
+---
+
+### `DELETE /post/{id}`
+Manda la entrada a la papelera, que es reversible.
+
+| Parámetro | Por defecto | Efecto |
+|-----------|-------------|--------|
+| `force`   | `false`     | `true` borra de forma **permanente**, sin papelera |
+
+**Respuesta:** `success`, `post_id`, `permanent`.
 
 ---
 

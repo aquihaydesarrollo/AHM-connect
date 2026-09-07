@@ -3,7 +3,7 @@
  * Plugin Name: AHM Connect
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
- * Version:     3.6.1
+ * Version:     3.6.2
  * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RMAI_VERSION',         '3.6.1' );
+define( 'RMAI_VERSION',         '3.6.2' );
 define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );
@@ -519,6 +519,7 @@ function rmai_settings_page(): void {
                         ['GET',    '/post/{id}',              'SEO + contenido de una entrada'],
                         ['PUT',    '/post/{id}',              'Actualizar campos SEO'],
                         ['PUT',    '/post/{id}/content',      'Actualizar post_content / excerpt'],
+                        ['POST',   '/post/{id}/elementor-replace', 'Sustituir texto dentro de _elementor_data'],
                         ['POST',   '/bulk-update',            'Actualizar SEO en lote'],
                         ['POST',   '/bulk-content',           'Actualizar contenido, título o slug en lote'],
                         ['GET',    '/post/{id}/score',        'Puntuación SEO Rank Math'],
@@ -1156,6 +1157,12 @@ function rmai_register_routes(): void {
     register_rest_route( RMAI_NAMESPACE, '/bulk-content', [
         'methods'             => WP_REST_Server::CREATABLE,
         'callback'            => 'rmai_bulk_content',
+        'permission_callback' => $perm,
+    ] );
+
+    register_rest_route( RMAI_NAMESPACE, '/post/(?P<id>\d+)/elementor-replace', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_elementor_replace',
         'permission_callback' => $perm,
     ] );
 
@@ -1829,7 +1836,7 @@ function rmai_update_post_content( WP_REST_Request $request ) {
         return new WP_Error( 'rmai_not_found', 'Entrada no encontrada.', [ 'status' => 404 ] );
     }
 
-    if ( rmai_is_elementor_post( $post->ID ) ) {
+    if ( rmai_content_write_blocked( $post ) ) {
         return new WP_Error(
             'rmai_elementor_protected',
             'Esta página está construida con Elementor. Modifica el contenido manualmente desde el editor de Elementor para no romper el diseño.',
@@ -1990,7 +1997,8 @@ function rmai_bulk_content( WP_REST_Request $request ) {
         }
 
         // Protección Elementor: bloquear post_content / post_excerpt en páginas Elementor
-        $is_elementor = rmai_is_elementor_post( $id );
+        // (excepto productos WooCommerce, ver rmai_content_write_blocked()).
+        $is_elementor = rmai_content_write_blocked( $post );
         $content_fields_requested = isset( $item['post_content'] ) || isset( $item['post_excerpt'] );
 
         if ( $is_elementor && $content_fields_requested ) {
@@ -2166,6 +2174,218 @@ function rmai_score_rating( int $score ): string {
  */
 function rmai_is_elementor_post( int $post_id ): bool {
     return get_post_meta( $post_id, '_elementor_edit_mode', true ) === 'builder';
+}
+
+/**
+ * Gate de escritura de post_content / post_excerpt vía API.
+ *
+ * En páginas Elementor normales el texto visible vive en _elementor_data, así
+ * que tocar post_content no cambia nada visible y puede desincronizar ambos.
+ * En productos WooCommerce, en cambio, la plantilla de producto único suele
+ * leer post_content a través de una etiqueta dinámica de Elementor
+ * ("woocommerce-product-content-tag") que solo REFERENCIA el campo — no lo
+ * embebe en _elementor_data — así que escribir ahí es seguro.
+ */
+function rmai_content_write_blocked( WP_Post $post ): bool {
+    return rmai_is_elementor_post( $post->ID ) && 'product' !== $post->post_type;
+}
+
+/**
+ * Cuenta recursivamente los nodos con clave "elType" dentro de un árbol
+ * decodificado de _elementor_data. Se usa como huella de la estructura: si el
+ * número de nodos cambia tras una sustitución de texto, algo más que el texto
+ * se ha visto afectado y no es seguro escribir.
+ */
+function rmai_count_eltype_nodes( $data ): int {
+    if ( ! is_array( $data ) ) {
+        return 0;
+    }
+    $count = isset( $data['elType'] ) ? 1 : 0;
+    foreach ( $data as $value ) {
+        if ( is_array( $value ) ) {
+            $count += rmai_count_eltype_nodes( $value );
+        }
+    }
+    return $count;
+}
+
+/**
+ * POST /post/{id}/elementor-replace
+ *
+ * Sustituye texto embebido en _elementor_data operando SIEMPRE sobre la
+ * cadena JSON cruda, nunca decodificando el árbol completo a PHP y volviendo
+ * a codificarlo: Elementor guarda los acentos tal cual (ñ) y las barras
+ * escapadas ("\/"), y un decode+encode global cambia ese escapado sin romper
+ * la validez del JSON — pero Elementor deja de renderizar la plantilla
+ * (incidente real del 2026-09-02). Por eso cada "replacement" se localiza y
+ * sustituye como subcadena literal dentro del blob original.
+ */
+function rmai_elementor_replace( WP_REST_Request $request ) {
+    $post = get_post( (int) $request->get_param( 'id' ) );
+    if ( ! $post ) {
+        return new WP_Error( 'rmai_not_found', 'Entrada no encontrada.', [ 'status' => 404 ] );
+    }
+
+    $raw = get_post_meta( $post->ID, '_elementor_data', true );
+    if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
+        return new WP_Error( 'rmai_no_elementor_data', 'Esta entrada no tiene _elementor_data.', [ 'status' => 400 ] );
+    }
+
+    $body         = $request->get_json_params();
+    $dry_run      = ! empty( $body['dry_run'] );
+    $replacements = ( isset( $body['replacements'] ) && is_array( $body['replacements'] ) ) ? $body['replacements'] : [];
+
+    if ( empty( $replacements ) ) {
+        return new WP_Error(
+            'rmai_empty_body',
+            'Incluye un array "replacements": [{search, replace, expected?}].',
+            [ 'status' => 400 ]
+        );
+    }
+
+    if ( count( $replacements ) > 30 ) {
+        return new WP_Error( 'rmai_too_many', 'Máximo 30 replacements por petición.', [ 'status' => 400 ] );
+    }
+
+    $working     = $raw;
+    $report      = [];
+    $any_applied = false;
+
+    foreach ( $replacements as $item ) {
+        $search   = isset( $item['search'] ) ? (string) $item['search'] : '';
+        $replace  = isset( $item['replace'] ) ? (string) $item['replace'] : '';
+        $expected = isset( $item['expected'] ) ? (int) $item['expected'] : 1;
+
+        $entry = [
+            'search'   => $search,
+            'expected' => $expected,
+            'applied'  => false,
+        ];
+
+        if ( '' === $search ) {
+            $entry['reason'] = 'El campo "search" está vacío.';
+            $report[] = $entry;
+            continue;
+        }
+
+        // Elementor guarda los acentos escapados como ñ y las barras como
+        // "\/" (escapado por defecto de json_encode, sin JSON_UNESCAPED_UNICODE).
+        // Se busca primero en esa forma, que es la real dentro del blob; si
+        // no aparece, se prueba la forma literal.
+        $escaped_search  = substr( wp_json_encode( $search ), 1, -1 );
+        $escaped_replace = substr( wp_json_encode( $replace ), 1, -1 );
+
+        $count_escaped = substr_count( $working, $escaped_search );
+
+        if ( $count_escaped > 0 ) {
+            $form         = 'escaped';
+            $found_count  = $count_escaped;
+            $search_form  = $escaped_search;
+            $replace_form = $escaped_replace;
+        } else {
+            $form         = 'literal';
+            $found_count  = substr_count( $working, $search );
+            $search_form  = $search;
+            $replace_form = $replace;
+        }
+
+        $entry['form']  = $form;
+        $entry['found'] = $found_count;
+
+        if ( $found_count !== $expected ) {
+            $entry['reason'] = ( 0 === $found_count )
+                ? 'No se encontró la cadena buscada (ni en forma escapada ni literal).'
+                : sprintf( 'Se encontraron %d apariciones, se esperaban %d.', $found_count, $expected );
+            $report[] = $entry;
+            continue;
+        }
+
+        // Misma forma (escapada o literal) para search y replace: nunca se
+        // mezclan escapados distintos dentro de la misma cadena resultante.
+        $working = str_replace( $search_form, $replace_form, $working );
+        $entry['applied'] = true;
+        $any_applied = true;
+        $report[] = $entry;
+    }
+
+    if ( ! $any_applied ) {
+        return new WP_REST_Response( [
+            'success' => false,
+            'post_id' => $post->ID,
+            'report'  => $report,
+        ], 200 );
+    }
+
+    $decoded_new = json_decode( $working, true );
+    if ( JSON_ERROR_NONE !== json_last_error() ) {
+        return new WP_Error(
+            'rmai_broken_json',
+            'La sustitución generaría un JSON inválido en _elementor_data. No se ha escrito nada: ' . json_last_error_msg(),
+            [ 'status' => 500 ]
+        );
+    }
+
+    $decoded_original = json_decode( $raw, true );
+    $nodes_before      = rmai_count_eltype_nodes( $decoded_original );
+    $nodes_after       = rmai_count_eltype_nodes( $decoded_new );
+
+    if ( $nodes_before !== $nodes_after ) {
+        return new WP_Error(
+            'rmai_node_count_mismatch',
+            sprintf(
+                'La sustitución alteraría la estructura de Elementor (%d nodos antes, %d después), no solo el texto. No se ha escrito nada.',
+                $nodes_before,
+                $nodes_after
+            ),
+            [ 'status' => 500 ]
+        );
+    }
+
+    $bytes_before = strlen( $raw );
+    $bytes_after  = strlen( $working );
+
+    if ( $dry_run ) {
+        return new WP_REST_Response( [
+            'success'      => true,
+            'dry_run'      => true,
+            'post_id'      => $post->ID,
+            'report'       => $report,
+            'bytes_before' => $bytes_before,
+            'bytes_after'  => $bytes_after,
+            'nodes_before' => $nodes_before,
+            'nodes_after'  => $nodes_after,
+        ], 200 );
+    }
+
+    // update_metadata() aplica wp_unslash() al valor: hay que escaparlo antes,
+    // igual que en rmai_set_post_meta(), o las barras invertidas de Elementor
+    // se corrompen al guardar.
+    update_post_meta( $post->ID, '_elementor_data', wp_slash( $working ) );
+
+    // Verificación de ida y vuelta: si lo almacenado no coincide EXACTAMENTE
+    // con lo que se intentó guardar, se revierte de inmediato al valor original.
+    $stored = get_post_meta( $post->ID, '_elementor_data', true );
+    if ( $stored !== $working ) {
+        update_post_meta( $post->ID, '_elementor_data', wp_slash( $raw ) );
+        return new WP_Error(
+            'rmai_meta_roundtrip_failed',
+            'El valor almacenado no coincide exactamente con el generado. Se ha revertido _elementor_data al valor original.',
+            [ 'status' => 500 ]
+        );
+    }
+
+    rmai_trigger_score_recalculation( $post->ID );
+
+    return new WP_REST_Response( [
+        'success'      => true,
+        'dry_run'      => false,
+        'post_id'      => $post->ID,
+        'report'       => $report,
+        'bytes_before' => $bytes_before,
+        'bytes_after'  => $bytes_after,
+        'nodes_before' => $nodes_before,
+        'nodes_after'  => $nodes_after,
+    ], 200 );
 }
 
 // ═══════════════════════════════════════════════════════

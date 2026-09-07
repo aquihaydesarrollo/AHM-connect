@@ -3,7 +3,7 @@
  * Plugin Name: AHM Connect
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
- * Version:     3.6.0
+ * Version:     3.6.1
  * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RMAI_VERSION',         '3.6.0' );
+define( 'RMAI_VERSION',         '3.6.1' );
 define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );
@@ -520,7 +520,7 @@ function rmai_settings_page(): void {
                         ['PUT',    '/post/{id}',              'Actualizar campos SEO'],
                         ['PUT',    '/post/{id}/content',      'Actualizar post_content / excerpt'],
                         ['POST',   '/bulk-update',            'Actualizar SEO en lote'],
-                        ['POST',   '/bulk-content',           'Actualizar contenido en lote'],
+                        ['POST',   '/bulk-content',           'Actualizar contenido, título o slug en lote'],
                         ['GET',    '/post/{id}/score',        'Puntuación SEO Rank Math'],
                         ['POST',   '/create-post',            'Crear entrada/página/producto'],
                         ['POST',   '/recalculate-scores',     'Recalcular scores Rank Math'],
@@ -1966,12 +1966,12 @@ function rmai_render_html_in_product_attribute( string $value, $attribute, array
     return wp_kses_post( $raw );
 }
 
-/** POST /bulk-content — formato: [{id, post_content?, post_excerpt?, slug?}] */
+/** POST /bulk-content — formato: [{id, post_content?, post_excerpt?, title?, slug?}] */
 function rmai_bulk_content( WP_REST_Request $request ) {
     $body = $request->get_json_params();
 
     if ( empty( $body ) || ! is_array( $body ) ) {
-        return new WP_Error( 'rmai_empty_body', 'Envía un array de objetos [{id, post_content?, post_excerpt?}].', [ 'status' => 400 ] );
+        return new WP_Error( 'rmai_empty_body', 'Envía un array de objetos [{id, post_content?, post_excerpt?, title?, slug?}].', [ 'status' => 400 ] );
     }
 
     if ( count( $body ) > 20 ) {
@@ -2016,6 +2016,21 @@ function rmai_bulk_content( WP_REST_Request $request ) {
             $updated[] = 'post_excerpt';
         }
 
+        // El título (post_title) es una columna aparte de wp_posts, no forma
+        // parte de _elementor_data: cambiarlo es seguro incluso en páginas
+        // Elementor, donde el H1 suele leerlo con una etiqueta dinámica.
+        if ( isset( $item['title'] ) ) {
+            $update['post_title'] = sanitize_text_field( (string) $item['title'] );
+            $updated[] = 'title';
+
+            // Se fija el slug actual de forma explícita para blindarlo: un
+            // cambio de título nunca debe arrastrar un cambio de URL, salvo
+            // que el propio item pida un slug nuevo (se sobrescribe abajo).
+            if ( ! isset( $item['slug'] ) ) {
+                $update['post_name'] = $post->post_name;
+            }
+        }
+
         if ( isset( $item['slug'] ) ) {
             $new_slug = sanitize_title( $item['slug'] );
             $existing = get_page_by_path( $new_slug, OBJECT, $post->post_type );
@@ -2038,6 +2053,18 @@ function rmai_bulk_content( WP_REST_Request $request ) {
             $results[] = [ 'id' => $id, 'success' => false, 'error' => $result->get_error_message() ];
             continue;
         }
+
+        // Si se tocó el título sin pedir slug nuevo, se relee y se corrige
+        // en caso de que algún hook lo haya desviado: el slug de un cambio
+        // de título nunca debe moverse solo.
+        if ( in_array( 'title', $updated, true ) && ! isset( $item['slug'] ) ) {
+            $post_after = get_post( $id );
+            if ( $post_after->post_name !== $post->post_name ) {
+                wp_update_post( [ 'ID' => $id, 'post_name' => $post->post_name ] );
+            }
+        }
+
+        $post = get_post( $id ); // refrescar para reportar el estado real
 
         rmai_trigger_score_recalculation( $id );
 

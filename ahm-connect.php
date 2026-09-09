@@ -3,7 +3,7 @@
  * Plugin Name: AHM Connect
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
- * Version:     3.6.2
+ * Version:     3.7.0
  * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RMAI_VERSION',         '3.6.2' );
+define( 'RMAI_VERSION',         '3.7.0' );
 define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );
@@ -630,6 +630,19 @@ function rmai_settings_page(): void {
                         ['POST',  '/post/{id}/meta',           'Escribir post meta'],
                     ];
                     foreach ( $endpoints7 as [$m,$p,$d] ) {
+                        $mc = strtolower( $m );
+                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
+                    }
+                    ?>
+                </div>
+
+                <div class="ahm-ep-section" style="break-inside:avoid">
+                    <div class="ahm-ep-group">🛠 Herramientas</div>
+                    <?php
+                    $endpoints8 = [
+                        ['POST',  '/tools/flush-rewrite',      'Regenerar reglas de rewrite (sitemap 404, etc.)'],
+                    ];
+                    foreach ( $endpoints8 as [$m,$p,$d] ) {
                         $mc = strtolower( $m );
                         echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
                     }
@@ -4927,6 +4940,101 @@ add_action( 'init', function (): void {
 remove_action( 'wp_head', 'rsd_link' );
 remove_action( 'wp_head', 'wlwmanifest_link' );
 remove_action( 'wp_head', 'wp_generator' );
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 18. HERRAMIENTAS DE MANTENIMIENTO (v3.7.0) — /tools/*
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Acciones de mantenimiento del sitio que hasta ahora exigían acceso a
+// wp-admin o SSH. Nacido de un incidente en un cliente real: tras actualizar
+// AHM Connect / Rank Math, las reglas de rewrite quedaron cacheadas y
+// /sitemap_index.xml devolvía 404 aunque ?sitemap=1 funcionaba. El único
+// arreglo fue "Ajustes → Enlaces permanentes → Guardar" a mano.
+
+add_action( 'rest_api_init', 'rmai_register_tools_routes' );
+function rmai_register_tools_routes(): void {
+    $perm = 'rmai_check_permission';
+
+    // Regenera las reglas de reescritura (equivalente a "Guardar" en
+    // Ajustes → Enlaces permanentes, o a `wp rewrite flush`).
+    register_rest_route( RMAI_NAMESPACE, '/tools/flush-rewrite', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_tool_flush_rewrite',
+        'permission_callback' => $perm,
+    ] );
+}
+
+/**
+ * POST /tools/flush-rewrite
+ *
+ * Fuerza un flush "duro" de las reglas de reescritura de WordPress.
+ * Resuelve, entre otros, sitemaps de Rank Math que devuelven 404 tras
+ * actualizar plugins pese a que la URL con query string (?sitemap=1)
+ * funciona con normalidad.
+ */
+function rmai_tool_flush_rewrite() {
+    flush_rewrite_rules( true );
+
+    return new WP_REST_Response( [
+        'success' => true,
+        'message' => 'Rewrite rules flushed.',
+    ], 200 );
+}
+
+/**
+ * Auto-flush tras actualizaciones de plugins (causa raíz).
+ *
+ * El incidente de un cliente real no fue puntual: el sitemap de Rank Math volvía
+ * a devolver 404 sin que nadie tocara nada, porque cada vez que Rank Math /
+ * WooCommerce se actualizan (auto-actualización de WP o desde el panel de
+ * hosting, no solo a mano) sus reglas de rewrite cambian pero WordPress no
+ * las regenera solo. Aquí se enlaza un flush al hook nativo que dispara
+ * WordPress al terminar CUALQUIER actualización de plugin (manual o
+ * automática), para que el sitemap no vuelva a romperse por esta causa.
+ *
+ * Solo actúa en updates de tipo "plugin" (no temas, no traducciones): un
+ * flush es barato y seguro para cualquier plugin, así que no hace falta
+ * filtrar por Rank Math/WooCommerce en concreto.
+ */
+add_action( 'upgrader_process_complete', 'rmai_maybe_flush_rewrites', 10, 2 );
+function rmai_maybe_flush_rewrites( $upgrader_object, $hook_extra ): void {
+    if ( ! is_array( $hook_extra )
+        || ( $hook_extra['action'] ?? '' ) !== 'update'
+        || ( $hook_extra['type'] ?? '' ) !== 'plugin'
+    ) {
+        return;
+    }
+
+    flush_rewrite_rules( false );
+
+    $plugins = $hook_extra['plugins'] ?? [];
+    rmai_log_internal_event( 'auto-flush-rewrite (plugin update: ' . implode( ', ', (array) $plugins ) . ')' );
+}
+
+/**
+ * Registra un evento interno (no ligado a una petición REST) en el mismo
+ * log que usa rmai_log(), para poder confirmar desde la pestaña "Log" que
+ * el auto-flush tras actualizaciones se ha disparado.
+ */
+function rmai_log_internal_event( string $route ): void {
+    $settings = wp_parse_args( get_option( RMAI_OPTION_SETTINGS, [] ), rmai_default_settings() );
+    if ( ! $settings['log_enabled'] ) return;
+
+    $log   = get_option( RMAI_LOG_OPTION, [] );
+    $log[] = [
+        'date'   => current_time( 'Y-m-d H:i:s' ),
+        'method' => 'CRON',
+        'route'  => '/tools/' . $route,
+        'status' => 200,
+        'ip'     => 'internal',
+    ];
+
+    if ( count( $log ) > RMAI_LOG_MAX ) {
+        $log = array_slice( $log, -RMAI_LOG_MAX );
+    }
+
+    update_option( RMAI_LOG_OPTION, $log );
+}
 
 // ═══════════════════════════════════════════════════════
 // 12. ACTUALIZACIONES AUTOMÁTICAS

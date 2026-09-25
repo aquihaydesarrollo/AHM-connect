@@ -24,6 +24,14 @@ define( 'RMAI_RATE_LIMIT',      60 );
 define( 'RMAI_LOG_OPTION',      'rmai_request_log' );
 define( 'RMAI_LOG_MAX',         100 );
 
+// ── AHM Sites (conexión con el panel central) ────────────
+define( 'RMAI_OPTION_AHM_SITES_ENABLED',   'rmai_ahm_sites_enabled' );   // bool: toggle on/off
+define( 'RMAI_OPTION_AHM_SITES_PAIRING',   'rmai_ahm_sites_pairing' );   // array: hash/expires/status del código de emparejamiento (nunca el código en claro)
+define( 'RMAI_OPTION_AHM_SITES_SITE_ID',   'rmai_ahm_sites_site_id' );   // int: id de sitio asignado por el panel
+define( 'RMAI_OPTION_AHM_SITES_SECRET',    'rmai_ahm_sites_secret' );    // string: secret HMAC (64 hex), sensible, autoload=no
+define( 'RMAI_OPTION_AHM_SITES_PANEL_URL', 'rmai_ahm_sites_panel_url' ); // string: URL base del panel
+define( 'RMAI_AHM_SITES_CRON_HOOK',        'rmai_ahm_sites_checkin_event' );
+
 // ═══════════════════════════════════════════════════════
 // 1. ACTIVACIÓN / DESACTIVACIÓN / DESINSTALACIÓN
 // ═══════════════════════════════════════════════════════
@@ -47,6 +55,11 @@ function rmai_uninstall(): void {
     delete_option( RMAI_OPTION_SETTINGS );
     delete_option( RMAI_OPTION_ENABLED );
     delete_option( RMAI_LOG_OPTION );
+    delete_option( RMAI_OPTION_AHM_SITES_ENABLED );
+    delete_option( RMAI_OPTION_AHM_SITES_PAIRING );
+    delete_option( RMAI_OPTION_AHM_SITES_SITE_ID );
+    delete_option( RMAI_OPTION_AHM_SITES_SECRET );
+    delete_option( RMAI_OPTION_AHM_SITES_PANEL_URL );
 }
 
 function rmai_generate_key(): string {
@@ -146,6 +159,42 @@ function rmai_handle_toggle_api(): void {
     exit;
 }
 
+add_action( 'admin_post_rmai_toggle_ahm_sites', 'rmai_handle_toggle_ahm_sites' );
+function rmai_handle_toggle_ahm_sites(): void {
+    if ( ! check_admin_referer( 'rmai_toggle_ahm_sites' ) || ! current_user_can( 'manage_options' ) ) {
+        wp_die( 'No autorizado.' );
+    }
+
+    $current = (bool) get_option( RMAI_OPTION_AHM_SITES_ENABLED, false );
+    $next    = ! $current;
+    update_option( RMAI_OPTION_AHM_SITES_ENABLED, $next );
+
+    if ( $next ) {
+        rmai_ahm_sites_maybe_schedule_checkin();
+        $code = rmai_ahm_sites_start_pairing();
+        set_transient( 'rmai_ahm_sites_code_display_' . get_current_user_id(), $code, 60 );
+        wp_safe_redirect( admin_url( 'options-general.php?page=ahm-connect&rmai_msg=ahm_sites_code_generated' ) );
+        exit;
+    }
+
+    rmai_ahm_sites_maybe_schedule_checkin();
+    wp_safe_redirect( admin_url( 'options-general.php?page=ahm-connect&rmai_msg=ahm_sites_disabled' ) );
+    exit;
+}
+
+add_action( 'admin_post_rmai_ahm_sites_generate_code', 'rmai_handle_ahm_sites_generate_code' );
+function rmai_handle_ahm_sites_generate_code(): void {
+    if ( ! check_admin_referer( 'rmai_ahm_sites_generate_code_action' ) || ! current_user_can( 'manage_options' ) ) {
+        wp_die( 'No autorizado.' );
+    }
+
+    $code = rmai_ahm_sites_start_pairing();
+    set_transient( 'rmai_ahm_sites_code_display_' . get_current_user_id(), $code, 60 );
+
+    wp_safe_redirect( admin_url( 'options-general.php?page=ahm-connect&rmai_msg=ahm_sites_code_generated' ) );
+    exit;
+}
+
 // ═══════════════════════════════════════════════════════
 // 3. ADMIN: MENÚ Y AJUSTES
 // ═══════════════════════════════════════════════════════
@@ -211,10 +260,28 @@ function rmai_settings_page(): void {
     $toggle_url  = wp_nonce_url( admin_url( 'admin-post.php?action=rmai_toggle_api' ), 'rmai_toggle_api' );
     $log_count   = count( $log );
     $notices     = [
-        'key_regenerated' => [ 'success', '✓ API Key regenerada. Actualiza la clave en tus herramientas.' ],
-        'log_cleared'     => [ 'success', '✓ Log de peticiones eliminado.' ],
-        'settings_saved'  => [ 'success', '✓ Ajustes guardados correctamente.' ],
+        'key_regenerated'        => [ 'success', '✓ API Key regenerada. Actualiza la clave en tus herramientas.' ],
+        'log_cleared'            => [ 'success', '✓ Log de peticiones eliminado.' ],
+        'settings_saved'         => [ 'success', '✓ Ajustes guardados correctamente.' ],
+        'ahm_sites_disabled'     => [ 'success', '✓ Conexión con AHM Sites desactivada.' ],
     ];
+
+    // ── AHM Sites: estado de la conexión con el panel ──────────────────────
+    $ahm_sites_enabled   = (bool) get_option( RMAI_OPTION_AHM_SITES_ENABLED, false );
+    $ahm_sites_site_id   = (int) get_option( RMAI_OPTION_AHM_SITES_SITE_ID, 0 );
+    $ahm_sites_panel_url = (string) get_option( RMAI_OPTION_AHM_SITES_PANEL_URL, '' );
+    $ahm_sites_connected = $ahm_sites_enabled && $ahm_sites_site_id && get_option( RMAI_OPTION_AHM_SITES_SECRET, '' );
+    $ahm_sites_toggle_url = wp_nonce_url( admin_url( 'admin-post.php?action=rmai_toggle_ahm_sites' ), 'rmai_toggle_ahm_sites' );
+
+    // El código de emparejamiento en claro solo existe en un transient de un solo uso
+    // (60s, puente entre el redirect POST->GET tras generarlo). Al leerlo aquí se borra:
+    // si se recarga la página ya no está disponible en ningún sitio (solo queda su hash).
+    $ahm_sites_new_code = null;
+    if ( $msg === 'ahm_sites_code_generated' ) {
+        $display_key        = 'rmai_ahm_sites_code_display_' . get_current_user_id();
+        $ahm_sites_new_code = get_transient( $display_key );
+        delete_transient( $display_key );
+    }
     ?>
     <style>
     #ahm-wrap *{box-sizing:border-box}
@@ -403,6 +470,7 @@ function rmai_settings_page(): void {
         <button class="ahm-tab active" onclick="ahmTab(this,'tab-main')">⚙️ Configuración</button>
         <button class="ahm-tab" onclick="ahmTab(this,'tab-endpoints')">📡 Endpoints</button>
         <button class="ahm-tab" onclick="ahmTab(this,'tab-geo')">📈 SEO / GEO</button>
+        <button class="ahm-tab" onclick="ahmTab(this,'tab-ahmsites')">🔗 AHM Sites<?php if ( $ahm_sites_connected ) : ?> <span style="background:#22c55e;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px">ON</span><?php endif; ?></button>
         <?php if ( $settings['log_enabled'] && ! empty( $log ) ) : ?>
         <button class="ahm-tab" onclick="ahmTab(this,'tab-log')">📋 Log <span style="background:#ef4444;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px"><?php echo $log_count; ?></span></button>
         <?php endif; ?>
@@ -1077,6 +1145,73 @@ function rmai_settings_page(): void {
 
     </div><!-- tab-geo -->
 
+    <!-- TAB: AHM SITES -->
+    <div id="tab-ahmsites" class="ahm-tab-content">
+        <div class="ahm-grid">
+
+            <!-- Estado / toggle -->
+            <div class="ahm-card">
+                <div class="ahm-card-header">
+                    <div class="ahm-card-icon <?php echo $ahm_sites_enabled ? 'green' : 'slate'; ?>">🔗</div>
+                    <div class="ahm-card-title">Conexión con AHM Sites</div>
+                </div>
+                <div class="ahm-card-body">
+                    <p style="font-size:12px;color:#64748b;margin:0 0 12px">Permite gestionar este sitio desde el panel central AHM Sites (actualizaciones, seguridad, monitorización) mediante un emparejamiento seguro de un solo uso.</p>
+
+                    <div class="ahm-toggle-row">
+                        <div>
+                            <div class="ahm-toggle-label">Emparejamiento con AHM Sites</div>
+                            <div class="ahm-toggle-desc"><?php echo $ahm_sites_enabled ? 'Activado. El plugin reporta al panel cada 15 min.' : 'Desactivado. Actívalo para generar un código de emparejamiento.'; ?></div>
+                        </div>
+                        <a href="<?php echo esc_url( $ahm_sites_toggle_url ); ?>" class="ahm-btn <?php echo $ahm_sites_enabled ? 'ahm-btn-danger' : 'ahm-btn-success'; ?> ahm-btn-sm" onclick="return confirm('<?php echo $ahm_sites_enabled ? '¿Desactivar la conexión con AHM Sites?' : '¿Activar la conexión? Se generará un código de emparejamiento de un solo uso.'; ?>')">
+                            <?php echo $ahm_sites_enabled ? '⏸ Desactivar' : '▶ Activar'; ?>
+                        </a>
+                    </div>
+
+                    <?php if ( $ahm_sites_new_code ) : ?>
+                    <div style="margin-top:16px;padding:14px 16px;border-radius:10px;background:#fffbeb;border:1.5px solid #fde68a">
+                        <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px">⚠️ Código de emparejamiento — cópialo ahora, expira en 10 minutos y NO se volverá a mostrar</div>
+                        <div class="ahm-key-wrap" style="margin-bottom:4px">
+                            <input type="text" class="ahm-key-input" id="ahm-sites-code" value="<?php echo esc_attr( $ahm_sites_new_code ); ?>" readonly onclick="this.select()">
+                            <button class="ahm-copy-btn" title="Copiar código" onclick="ahmCopyGeneric('ahm-sites-code','ahm-sites-copied')">📋</button>
+                        </div>
+                        <span id="ahm-sites-copied" style="color:#22c55e;font-size:12px;display:none">✓ Copiado</span>
+                        <div style="font-size:11px;color:#92400e;margin-top:4px">Pégalo en el panel AHM Sites para completar el emparejamiento de este sitio.</div>
+                    </div>
+                    <?php elseif ( $ahm_sites_enabled && ! $ahm_sites_connected ) : ?>
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:14px">
+                        <input type="hidden" name="action" value="rmai_ahm_sites_generate_code">
+                        <?php wp_nonce_field( 'rmai_ahm_sites_generate_code_action' ); ?>
+                        <button type="submit" class="ahm-btn ahm-btn-ghost ahm-btn-sm">🔄 Generar nuevo código de emparejamiento</button>
+                    </form>
+                    <?php endif; ?>
+
+                    <?php if ( $ahm_sites_connected ) : ?>
+                    <div style="margin-top:16px;padding:14px 16px;border-radius:10px;background:#f0fdf4;border:1.5px solid #86efac">
+                        <div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:6px">✓ Sitio emparejado con el panel</div>
+                        <div style="font-size:12px;color:#166534">Site ID: <strong><?php echo esc_html( $ahm_sites_site_id ); ?></strong></div>
+                        <div style="font-size:12px;color:#166534;word-break:break-all">Panel: <strong><?php echo esc_html( $ahm_sites_panel_url ); ?></strong></div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Rotación de clave -->
+            <div class="ahm-card">
+                <div class="ahm-card-header">
+                    <div class="ahm-card-icon slate">🔁</div>
+                    <div class="ahm-card-title">Rotación de la clave AHM Sites</div>
+                </div>
+                <div class="ahm-card-body">
+                    <p style="font-size:12px;color:#64748b;margin:0 0 12px">El secret de esta conexión (distinto de la API Key de arriba) lo rota automáticamente <strong>el panel AHM Sites</strong>, de forma firmada, sin intervención manual aquí.</p>
+                    <button type="button" class="ahm-btn ahm-btn-ghost ahm-btn-sm" disabled title="La rotación la inicia el panel AHM Sites, no este plugin">🔁 Rotar clave AHM Sites</button>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:8px">Este botón es informativo: la rotación se solicita siempre desde el panel.</div>
+                </div>
+            </div>
+
+        </div>
+    </div><!-- tab-ahmsites -->
+
     </div><!-- #ahm-wrap -->
 
     <script>
@@ -1091,6 +1226,16 @@ function rmai_settings_page(): void {
         var val = document.getElementById('ahm-api-key').value;
         navigator.clipboard.writeText(val).then(function() {
             var el = document.getElementById('ahm-copied');
+            el.style.display = 'inline';
+            setTimeout(function(){ el.style.display = 'none'; }, 2000);
+        });
+    }
+    function ahmCopyGeneric(inputId, feedbackId) {
+        var input = document.getElementById(inputId);
+        if (! input) return;
+        navigator.clipboard.writeText(input.value).then(function() {
+            var el = document.getElementById(feedbackId);
+            if (! el) return;
             el.style.display = 'inline';
             setTimeout(function(){ el.style.display = 'none'; }, 2000);
         });
@@ -5216,3 +5361,270 @@ add_action( 'admin_init', function () {
     wp_safe_redirect( admin_url( 'plugins.php' ) );
     exit;
 } );
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 19. AHM SITES — CONEXIÓN CON EL PANEL (v3.7.0)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// El panel AHM Sites es quien genera y posee el secret real de conexión.
+// Este plugin solo INICIA el emparejamiento con un código corto de un solo
+// uso (16 hex, vive 10 min, se guarda hasheado con SHA-256 — nunca en claro).
+// El panel llama a /ahm-sites/pair y /ahm-sites/activate con ese código para
+// entregar el secret definitivo (64 hex). A partir de ahí, el plugin hace un
+// checkin periódico saliente firmado con HMAC (igual esquema que ahm-agent).
+//
+// Rutas públicas por diseño (permission_callback true): el código de
+// emparejamiento y la firma HMAC SON la credencial. Llevan su propio rate
+// limit (5 req/min por IP) para no compartir cupo con la API key general.
+
+/**
+ * Arranca (o reinicia) el emparejamiento: genera un código de un solo uso,
+ * guarda solo su hash + expiración, y devuelve el código EN CLARO para que
+ * el llamante lo muestre una única vez. No queda persistido en claro en
+ * ningún sitio tras esta llamada.
+ */
+function rmai_ahm_sites_start_pairing(): string {
+    $code = bin2hex( random_bytes( 8 ) ); // 16 caracteres hex
+
+    update_option( RMAI_OPTION_AHM_SITES_PAIRING, [
+        'hash'    => hash( 'sha256', $code ),
+        'expires' => time() + 600, // 10 minutos
+        'status'  => 'pending',
+    ], false );
+
+    return $code;
+}
+
+/**
+ * Rate limit propio para las rutas públicas de emparejamiento/activación:
+ * 5 peticiones/min por IP, en un bucket de transients separado del de la
+ * API key general (RMAI_RATE_LIMIT) para no interferir con integraciones
+ * ya autenticadas.
+ */
+function rmai_ahm_sites_pairing_permission( WP_REST_Request $request ) {
+    $ip        = rmai_get_ip();
+    $transient = 'rmai_ahm_sites_rl_' . md5( $ip );
+    $count     = (int) get_transient( $transient );
+
+    if ( $count >= 5 ) {
+        return new WP_Error( 'rmai_ahm_sites_rate_limit', 'Demasiadas peticiones. Espera un minuto.', [ 'status' => 429 ] );
+    }
+
+    set_transient( $transient, $count + 1, 60 );
+    return true;
+}
+
+add_action( 'rest_api_init', 'rmai_ahm_sites_register_routes' );
+function rmai_ahm_sites_register_routes(): void {
+
+    // POST /ahm-sites/pair — { code } -> confirma que el código es válido y sigue vivo.
+    register_rest_route( RMAI_NAMESPACE, '/ahm-sites/pair', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_rest_ahm_sites_pair',
+        'permission_callback' => 'rmai_ahm_sites_pairing_permission',
+        'args'                => [
+            'code' => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ],
+        ],
+    ] );
+
+    // POST /ahm-sites/activate — { code, site_id, secret, panel_url } -> entrega el secret definitivo.
+    register_rest_route( RMAI_NAMESPACE, '/ahm-sites/activate', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_rest_ahm_sites_activate',
+        'permission_callback' => 'rmai_ahm_sites_pairing_permission',
+        'args'                => [
+            'code'      => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ],
+            'site_id'   => [ 'required' => true, 'sanitize_callback' => 'absint' ],
+            'secret'    => [ 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ],
+            'panel_url' => [ 'required' => true, 'sanitize_callback' => 'esc_url_raw' ],
+        ],
+    ] );
+
+    // POST /ahm-sites/rotate — job firmado por el panel (id.type.payload.expires + HMAC),
+    // igual esquema que los agent-jobs de ahm-agent, pero con rmai_ahm_sites_secret como clave.
+    register_rest_route( RMAI_NAMESPACE, '/ahm-sites/rotate', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_rest_ahm_sites_rotate',
+        'permission_callback' => '__return_true', // la firma HMAC es la única credencial
+    ] );
+}
+
+function rmai_rest_ahm_sites_pair( WP_REST_Request $request ) {
+    $code    = (string) $request->get_param( 'code' );
+    $pairing = get_option( RMAI_OPTION_AHM_SITES_PAIRING, [] );
+
+    $valid = ! empty( $code )
+        && ! empty( $pairing['hash'] )
+        && ( $pairing['status'] ?? '' ) === 'pending'
+        && ( $pairing['expires'] ?? 0 ) >= time()
+        && hash_equals( $pairing['hash'], hash( 'sha256', $code ) );
+
+    if ( ! $valid ) {
+        return new WP_REST_Response( [ 'ok' => false, 'error' => 'invalid_or_expired_code' ], 403 );
+    }
+
+    $pairing['status']          = 'confirmed';
+    $pairing['confirmed_until'] = time() + 60;
+    update_option( RMAI_OPTION_AHM_SITES_PAIRING, $pairing, false );
+
+    return new WP_REST_Response( [
+        'ok'        => true,
+        'site_url'  => home_url(),
+        'rest_base' => rest_url( RMAI_NAMESPACE ),
+    ], 200 );
+}
+
+function rmai_rest_ahm_sites_activate( WP_REST_Request $request ) {
+    $code      = (string) $request->get_param( 'code' );
+    $site_id   = absint( $request->get_param( 'site_id' ) );
+    $secret    = (string) $request->get_param( 'secret' );
+    $panel_url = esc_url_raw( (string) $request->get_param( 'panel_url' ) );
+
+    $pairing = get_option( RMAI_OPTION_AHM_SITES_PAIRING, [] );
+
+    $valid = ! empty( $code )
+        && ! empty( $pairing['hash'] )
+        && ( $pairing['status'] ?? '' ) === 'confirmed'
+        && ( $pairing['confirmed_until'] ?? 0 ) >= time()
+        && hash_equals( $pairing['hash'], hash( 'sha256', $code ) )
+        && $site_id > 0
+        && $panel_url
+        && preg_match( '/^[a-f0-9]{64}$/i', $secret );
+
+    if ( ! $valid ) {
+        // Nunca se registra $code ni $secret en claro, ni siquiera en el error.
+        return new WP_REST_Response( [ 'ok' => false, 'error' => 'invalid_or_expired_code' ], 403 );
+    }
+
+    update_option( RMAI_OPTION_AHM_SITES_SITE_ID, $site_id, false );
+    update_option( RMAI_OPTION_AHM_SITES_SECRET, $secret, false );
+    update_option( RMAI_OPTION_AHM_SITES_PANEL_URL, $panel_url, false );
+
+    // El código de emparejamiento es de un solo uso: se destruye entero (hash incluido).
+    delete_option( RMAI_OPTION_AHM_SITES_PAIRING );
+
+    rmai_ahm_sites_maybe_schedule_checkin();
+
+    return new WP_REST_Response( [ 'ok' => true ], 200 );
+}
+
+/**
+ * Rotación de secret iniciada por el panel, sin desconectar el sitio.
+ * Verifica un "signed job" con el MISMO algoritmo que ahm-agent usa para sus
+ * agent-jobs (ver ahm-agent.php, ahm_run_jobs): HMAC-SHA256 sobre
+ * "id.type.payload_json.expires", firmado con el secret VIGENTE. payload_json
+ * se serializa con JSON_UNESCAPED_SLASHES para que coincida byte a byte con
+ * lo que firma el panel.
+ */
+function rmai_rest_ahm_sites_rotate( WP_REST_Request $request ) {
+    $secret = (string) get_option( RMAI_OPTION_AHM_SITES_SECRET, '' );
+    if ( empty( $secret ) ) {
+        return new WP_REST_Response( [ 'ok' => false, 'error' => 'not_connected' ], 403 );
+    }
+
+    $id        = absint( $request->get_param( 'id' ) );
+    $type      = (string) $request->get_param( 'type' );
+    $payload   = $request->get_param( 'payload' );
+    $payload   = is_array( $payload ) ? $payload : [];
+    $expires   = absint( $request->get_param( 'expires' ) );
+    $signature = (string) $request->get_param( 'signature' );
+
+    $payload_json = wp_json_encode( $payload, JSON_UNESCAPED_SLASHES );
+    $expected     = hash_hmac( 'sha256', $id . '.' . $type . '.' . $payload_json . '.' . $expires, $secret );
+
+    if ( empty( $signature ) || ! hash_equals( $expected, $signature ) ) {
+        return new WP_REST_Response( [ 'ok' => false, 'error' => 'invalid_signature' ], 403 );
+    }
+    if ( $expires < time() ) {
+        return new WP_REST_Response( [ 'ok' => false, 'error' => 'expired' ], 403 );
+    }
+    if ( 'rotate_secret' !== $type ) {
+        return new WP_REST_Response( [ 'ok' => false, 'error' => 'invalid_type' ], 400 );
+    }
+
+    $new_secret = (string) ( $payload['new_secret'] ?? '' );
+    if ( ! preg_match( '/^[a-f0-9]{64}$/i', $new_secret ) ) {
+        return new WP_REST_Response( [ 'ok' => false, 'error' => 'invalid_new_secret' ], 400 );
+    }
+
+    // $new_secret nunca se pasa a rmai_log() ni a error_log().
+    update_option( RMAI_OPTION_AHM_SITES_SECRET, $new_secret, false );
+
+    return new WP_REST_Response( [ 'ok' => true ], 200 );
+}
+
+// ── Checkin periódico saliente (plugin -> panel) ────────────────────────────
+
+add_filter( 'cron_schedules', 'rmai_ahm_sites_cron_schedules' );
+function rmai_ahm_sites_cron_schedules( array $schedules ): array {
+    $schedules['rmai_15min'] = [
+        'interval' => 15 * MINUTE_IN_SECONDS,
+        'display'  => 'Cada 15 minutos (AHM Sites)',
+    ];
+    return $schedules;
+}
+
+/** Programa o desprograma el checkin según el toggle. Idempotente. */
+function rmai_ahm_sites_maybe_schedule_checkin(): void {
+    $enabled   = (bool) get_option( RMAI_OPTION_AHM_SITES_ENABLED, false );
+    $scheduled = wp_next_scheduled( RMAI_AHM_SITES_CRON_HOOK );
+
+    if ( $enabled && ! $scheduled ) {
+        wp_schedule_event( time() + 60, 'rmai_15min', RMAI_AHM_SITES_CRON_HOOK );
+    } elseif ( ! $enabled && $scheduled ) {
+        wp_clear_scheduled_hook( RMAI_AHM_SITES_CRON_HOOK );
+    }
+}
+add_action( 'wp_loaded', 'rmai_ahm_sites_maybe_schedule_checkin' );
+
+register_deactivation_hook( __FILE__, 'rmai_ahm_sites_unschedule_checkin' );
+function rmai_ahm_sites_unschedule_checkin(): void {
+    wp_clear_scheduled_hook( RMAI_AHM_SITES_CRON_HOOK );
+}
+
+add_action( RMAI_AHM_SITES_CRON_HOOK, 'rmai_ahm_sites_checkin' );
+/**
+ * Checkin saliente firmado, mismo formato que ahm-agent (ver ahm-agent.php,
+ * ahm_agent_checkin): headers X-AHM-Site / X-AHM-Timestamp / X-AHM-Nonce /
+ * X-AHM-Signature, con Signature = HMAC-SHA256("timestamp.nonce.rawBody", secret).
+ */
+function rmai_ahm_sites_checkin(): void {
+    if ( ! get_option( RMAI_OPTION_AHM_SITES_ENABLED, false ) ) {
+        return;
+    }
+
+    $secret    = (string) get_option( RMAI_OPTION_AHM_SITES_SECRET, '' );
+    $site_id   = (int) get_option( RMAI_OPTION_AHM_SITES_SITE_ID, 0 );
+    $panel_url = rtrim( (string) get_option( RMAI_OPTION_AHM_SITES_PANEL_URL, '' ), '/' );
+
+    if ( empty( $secret ) || empty( $site_id ) || empty( $panel_url ) ) {
+        return;
+    }
+
+    $state = [
+        'agent_version' => RMAI_VERSION,
+        'agent_type'    => 'ahm-connect',
+        'site_url'      => home_url(),
+        'wp_version'    => get_bloginfo( 'version' ),
+    ];
+    $body = wp_json_encode( $state );
+
+    $timestamp = (string) time();
+    $nonce     = wp_generate_uuid4();
+    $signature = hash_hmac( 'sha256', $timestamp . '.' . $nonce . '.' . $body, $secret );
+
+    wp_remote_post( $panel_url . '/api/agent/checkin', [
+        'timeout'   => 20,
+        'headers'   => [
+            'Content-Type'    => 'application/json',
+            'Accept'          => 'application/json',
+            'X-AHM-Site'      => (string) $site_id,
+            'X-AHM-Timestamp' => $timestamp,
+            'X-AHM-Nonce'     => $nonce,
+            'X-AHM-Signature' => $signature,
+        ],
+        'body'      => $body,
+        'sslverify' => true,
+    ] );
+    // $secret nunca se registra en logs.
+}

@@ -3,7 +3,7 @@
  * Plugin Name: AHM Connect
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
- * Version:     3.7.0
+ * Version:     3.7.1
  * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RMAI_VERSION',         '3.7.0' );
+define( 'RMAI_VERSION',         '3.7.1' );
 define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );

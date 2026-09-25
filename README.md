@@ -1,7 +1,7 @@
 # AHM Connect — Requisitos y documentación completa
 
 **Plugin:** AHM Connect  
-**Versión:** 3.6.0  
+**Versión:** 3.7.0  
 **Namespace REST:** `ahm-connect/v1`  
 **Autenticación:** cabecera `X-RMAI-Key`  
 **Autor:** Aquí Hay Marketing · aquihaymarketing.es
@@ -511,4 +511,4 @@ Acceso: **WordPress Admin → Ajustes → AHM Connect**
 
 ---
 
-*Última actualización: agosto 2026 · v3.6.0*
+*Última actualización: septiembre 2026 · v3.7.0*

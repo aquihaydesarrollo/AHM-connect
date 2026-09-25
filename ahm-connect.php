@@ -5091,7 +5091,7 @@ remove_action( 'wp_head', 'wp_generator' );
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // Acciones de mantenimiento del sitio que hasta ahora exigían acceso a
-// wp-admin o SSH. Nacido de un incidente en un cliente real: tras actualizar
+// wp-admin o SSH. Nacido de un incidente real en un cliente: tras actualizar
 // AHM Connect / Rank Math, las reglas de rewrite quedaron cacheadas y
 // /sitemap_index.xml devolvía 404 aunque ?sitemap=1 funcionaba. El único
 // arreglo fue "Ajustes → Enlaces permanentes → Guardar" a mano.
@@ -5129,7 +5129,7 @@ function rmai_tool_flush_rewrite() {
 /**
  * Auto-flush tras actualizaciones de plugins (causa raíz).
  *
- * El incidente de un cliente real no fue puntual: el sitemap de Rank Math volvía
+ * El incidente no fue puntual: el sitemap de Rank Math volvía
  * a devolver 404 sin que nadie tocara nada, porque cada vez que Rank Math /
  * WooCommerce se actualizan (auto-actualización de WP o desde el panel de
  * hosting, no solo a mano) sus reglas de rewrite cambian pero WordPress no

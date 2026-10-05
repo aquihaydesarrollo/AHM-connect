@@ -3,7 +3,7 @@
  * Plugin Name: AHM Connect
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
- * Version:     3.7.1
+ * Version:     3.7.2
  * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RMAI_VERSION',         '3.7.1' );
+define( 'RMAI_VERSION',         '3.7.2' );
 define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );
@@ -1891,16 +1891,24 @@ function rmai_set_post_meta( WP_REST_Request $request ) {
     $existed  = metadata_exists( 'post', $post->ID, $key );
     $previous = $existed ? get_post_meta( $post->ID, $key, true ) : null;
 
+    $is_elementor = ( '_elementor_data' === $key && is_string( $value ) );
+
     // update_metadata() aplica wp_unslash() al valor, así que hay que escaparlo antes.
     // Sin esto, cualquier JSON con barras invertidas (p. ej. _elementor_data) se corrompe.
-    update_post_meta( $post->ID, $key, wp_slash( $value ) );
+    if ( $is_elementor ) {
+        rmai_write_elementor_data( $post->ID, $value );
+    } else {
+        update_post_meta( $post->ID, $key, wp_slash( $value ) );
+    }
 
     // Verificación de ida y vuelta: si lo almacenado no coincide con lo enviado
     // (barras invertidas comidas, sanitización de terceros, etc.) se revierte en
     // lugar de dejar el contenido corrupto.
     $stored = get_post_meta( $post->ID, $key, true );
     if ( ! rmai_meta_values_match( $value, $stored ) ) {
-        if ( $existed ) {
+        if ( $existed && '_elementor_data' === $key && is_string( $previous ) ) {
+            rmai_write_elementor_data( $post->ID, $previous );
+        } elseif ( $existed ) {
             update_post_meta( $post->ID, $key, wp_slash( $previous ) );
         } else {
             delete_post_meta( $post->ID, $key );
@@ -1912,6 +1920,10 @@ function rmai_set_post_meta( WP_REST_Request $request ) {
         );
     }
 
+    if ( $is_elementor ) {
+        rmai_clear_elementor_post_css( $post->ID );
+    }
+
     return new WP_REST_Response( [
         'success'  => true,
         'post_id'  => $post->ID,
@@ -1919,6 +1931,63 @@ function rmai_set_post_meta( WP_REST_Request $request ) {
         'verified' => true,
         'stored'   => $stored,
     ], 200 );
+}
+
+/**
+ * Escribe _elementor_data sin que pase por el sanitize_callback de Elementor.
+ *
+ * Elementor 4.x registra _elementor_data con register_meta() y un
+ * sanitize_callback que, si el usuario actual no tiene unfiltered_html, hace
+ * json_decode + kses_post_deep + wp_json_encode. Las peticiones de esta API se
+ * autentican por clave, sin usuario WP, así que Elementor reescribía el JSON,
+ * la verificación de ida y vuelta no cuadraba y todo se revertía (500).
+ *
+ * Solo durante esta escritura se engancha un filtro de prioridad máxima que
+ * devuelve el JSON ya validado por el plugin. Los filtros se quitan siempre.
+ */
+function rmai_write_elementor_data( int $post_id, string $json ): bool {
+    $keep_ours = static function () use ( $json ) {
+        return $json;
+    };
+
+    $hooks     = [ 'sanitize_post_meta__elementor_data' ];
+    $post_type = get_post_type( $post_id );
+    if ( $post_type ) {
+        $hooks[] = 'sanitize_post_meta__elementor_data_for_' . $post_type;
+    }
+
+    foreach ( $hooks as $hook ) {
+        add_filter( $hook, $keep_ours, PHP_INT_MAX );
+    }
+
+    try {
+        // update_metadata() aplica wp_unslash(): hay que escapar antes.
+        return (bool) update_post_meta( $post_id, '_elementor_data', wp_slash( $json ) );
+    } finally {
+        foreach ( $hooks as $hook ) {
+            remove_filter( $hook, $keep_ours, PHP_INT_MAX );
+        }
+    }
+}
+
+/**
+ * Invalida el CSS generado por Elementor solo para este post, para que los
+ * ajustes que producen CSS (z_index, sticky, márgenes...) se apliquen. Elementor
+ * lo regenera en la siguiente visita. Sin Elementor no hace nada.
+ */
+function rmai_clear_elementor_post_css( int $post_id ): void {
+    if ( ! class_exists( '\\Elementor\\Plugin' ) ) {
+        return;
+    }
+    if ( class_exists( '\\Elementor\\Core\\Files\\CSS\\Post' ) ) {
+        try {
+            \Elementor\Core\Files\CSS\Post::create( $post_id )->delete();
+            return;
+        } catch ( \Throwable $e ) {
+            // Si la API interna de Elementor cambia, se cae al borrado del meta.
+        }
+    }
+    delete_post_meta( $post_id, '_elementor_css' );
 }
 
 /** Claves cuyo valor debe ser un blob JSON parseable. */
@@ -2518,13 +2587,13 @@ function rmai_elementor_replace( WP_REST_Request $request ) {
     // update_metadata() aplica wp_unslash() al valor: hay que escaparlo antes,
     // igual que en rmai_set_post_meta(), o las barras invertidas de Elementor
     // se corrompen al guardar.
-    update_post_meta( $post->ID, '_elementor_data', wp_slash( $working ) );
+    rmai_write_elementor_data( $post->ID, $working );
 
     // Verificación de ida y vuelta: si lo almacenado no coincide EXACTAMENTE
     // con lo que se intentó guardar, se revierte de inmediato al valor original.
     $stored = get_post_meta( $post->ID, '_elementor_data', true );
     if ( $stored !== $working ) {
-        update_post_meta( $post->ID, '_elementor_data', wp_slash( $raw ) );
+        rmai_write_elementor_data( $post->ID, $raw );
         return new WP_Error(
             'rmai_meta_roundtrip_failed',
             'El valor almacenado no coincide exactamente con el generado. Se ha revertido _elementor_data al valor original.',
@@ -2532,6 +2601,7 @@ function rmai_elementor_replace( WP_REST_Request $request ) {
         );
     }
 
+    rmai_clear_elementor_post_css( $post->ID );
     rmai_trigger_score_recalculation( $post->ID );
 
     return new WP_REST_Response( [

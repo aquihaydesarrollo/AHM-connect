@@ -320,6 +320,7 @@ function rmai_settings_page(): void {
     .ahm-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
     .ahm-card-header{padding:16px 20px 12px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px}
     .ahm-card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+    .ahm-card-icon .dashicons{font-size:17px;width:17px;height:17px}
     .ahm-card-icon.blue{background:#eff6ff}
     .ahm-card-icon.green{background:#f0fdf4}
     .ahm-card-icon.purple{background:#faf5ff}
@@ -333,6 +334,7 @@ function rmai_settings_page(): void {
     .ahm-key-input{width:100%;padding:10px 44px 10px 12px;font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;color:#334155;cursor:pointer;transition:.15s}
     .ahm-key-input:focus{outline:none;border-color:#3b82f6;background:#fff}
     .ahm-copy-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#64748b;padding:4px;font-size:14px;transition:.15s}
+    .ahm-copy-btn .dashicons{font-size:15px;width:15px;height:15px;vertical-align:middle}
     .ahm-copy-btn:hover{color:#3b82f6}
 
     /* Buttons */
@@ -407,6 +409,7 @@ function rmai_settings_page(): void {
     .ahm-tab{padding:8px 16px;font-size:13px;font-weight:500;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;background:none;border-top:none;border-left:none;border-right:none;transition:.15s}
     .ahm-tab:hover{color:#334155}
     .ahm-tab.active{color:#3b82f6;border-bottom-color:#3b82f6}
+    .ahm-tab .dashicons{font-size:15px;width:15px;height:15px;line-height:1;vertical-align:-2px;margin-right:2px}
     .ahm-tab-content{display:none}
     .ahm-tab-content.active{display:block}
     </style>
@@ -467,12 +470,12 @@ function rmai_settings_page(): void {
 
     <!-- TABS -->
     <div class="ahm-tabs">
-        <button class="ahm-tab active" onclick="ahmTab(this,'tab-main')">⚙️ Configuración</button>
-        <button class="ahm-tab" onclick="ahmTab(this,'tab-endpoints')">📡 Endpoints</button>
-        <button class="ahm-tab" onclick="ahmTab(this,'tab-geo')">📈 SEO / GEO</button>
-        <button class="ahm-tab" onclick="ahmTab(this,'tab-ahmsites')">🔗 AHM Sites<?php if ( $ahm_sites_connected ) : ?> <span style="background:#22c55e;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px">ON</span><?php endif; ?></button>
+        <button class="ahm-tab active" onclick="ahmTab(this,'tab-main')"><span class="dashicons dashicons-admin-generic"></span> Configuración</button>
+        <button class="ahm-tab" onclick="ahmTab(this,'tab-endpoints')"><span class="dashicons dashicons-networking"></span> Endpoints</button>
+        <button class="ahm-tab" onclick="ahmTab(this,'tab-geo')"><span class="dashicons dashicons-chart-line"></span> SEO / GEO</button>
+        <button class="ahm-tab" onclick="ahmTab(this,'tab-ahmsites')"><span class="dashicons dashicons-admin-links"></span> AHM Sites<?php if ( $ahm_sites_connected ) : ?> <span style="background:#22c55e;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px">ON</span><?php endif; ?></button>
         <?php if ( $settings['log_enabled'] && ! empty( $log ) ) : ?>
-        <button class="ahm-tab" onclick="ahmTab(this,'tab-log')">📋 Log <span style="background:#ef4444;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px"><?php echo $log_count; ?></span></button>
+        <button class="ahm-tab" onclick="ahmTab(this,'tab-log')"><span class="dashicons dashicons-clipboard"></span> Log <span style="background:#ef4444;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px"><?php echo $log_count; ?></span></button>
         <?php endif; ?>
     </div>
 
@@ -490,7 +493,7 @@ function rmai_settings_page(): void {
                     <p style="font-size:12px;color:#64748b;margin:0 0 12px">Incluye en la cabecera <code style="background:#f1f5f9;padding:1px 5px;border-radius:4px">X-RMAI-Key</code> de cada petición.</p>
                     <div class="ahm-key-wrap">
                         <input type="text" class="ahm-key-input" id="ahm-api-key" value="<?php echo esc_attr( $api_key ); ?>" readonly onclick="this.select()">
-                        <button class="ahm-copy-btn" title="Copiar clave" onclick="ahmCopy()">📋</button>
+                        <button class="ahm-copy-btn" title="Copiar clave" onclick="ahmCopy()"><span class="dashicons dashicons-clipboard"></span></button>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center">
                         <form method="post" style="margin:0">

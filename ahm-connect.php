@@ -260,10 +260,10 @@ function rmai_settings_page(): void {
     $toggle_url  = wp_nonce_url( admin_url( 'admin-post.php?action=rmai_toggle_api' ), 'rmai_toggle_api' );
     $log_count   = count( $log );
     $notices     = [
-        'key_regenerated'        => [ 'success', '✓ API Key regenerada. Actualiza la clave en tus herramientas.' ],
-        'log_cleared'            => [ 'success', '✓ Log de peticiones eliminado.' ],
-        'settings_saved'         => [ 'success', '✓ Ajustes guardados correctamente.' ],
-        'ahm_sites_disabled'     => [ 'success', '✓ Conexión con AHM Sites desactivada.' ],
+        'key_regenerated'        => [ 'success', 'API Key regenerada. Actualiza la clave en tus herramientas.' ],
+        'log_cleared'            => [ 'success', 'Log de peticiones eliminado.' ],
+        'settings_saved'         => [ 'success', 'Ajustes guardados correctamente.' ],
+        'ahm_sites_disabled'     => [ 'success', 'Conexión con AHM Sites desactivada.' ],
     ];
 
     // ── AHM Sites: estado de la conexión con el panel ──────────────────────
@@ -291,6 +291,7 @@ function rmai_settings_page(): void {
     .ahm-header{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-radius:12px;padding:28px 32px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
     .ahm-header-left{display:flex;align-items:center;gap:16px}
     .ahm-logo{width:44px;height:44px;background:#3b82f6;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+    .ahm-logo .dashicons{color:#fff;font-size:24px;width:24px;height:24px}
     .ahm-header h1{color:#fff;font-size:22px;font-weight:700;margin:0;padding:0}
     .ahm-header h1 span{color:#93c5fd;font-size:13px;font-weight:400;margin-left:8px}
     .ahm-header p{color:#94a3b8;font-size:13px;margin:3px 0 0}
@@ -321,6 +322,11 @@ function rmai_settings_page(): void {
     .ahm-card-header{padding:16px 20px 12px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px}
     .ahm-card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
     .ahm-card-icon .dashicons{font-size:17px;width:17px;height:17px}
+    .ahm-card-icon.blue .dashicons{color:#3b82f6}
+    .ahm-card-icon.green .dashicons{color:#22c55e}
+    .ahm-card-icon.purple .dashicons{color:#a855f7}
+    .ahm-card-icon.orange .dashicons{color:#f97316}
+    .ahm-card-icon.slate .dashicons{color:#64748b}
     .ahm-card-icon.blue{background:#eff6ff}
     .ahm-card-icon.green{background:#f0fdf4}
     .ahm-card-icon.purple{background:#faf5ff}
@@ -349,6 +355,7 @@ function rmai_settings_page(): void {
     .ahm-btn-ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
     .ahm-btn-ghost:hover{background:#e2e8f0;color:#334155}
     .ahm-btn-sm{padding:5px 12px;font-size:12px}
+    .ahm-btn .dashicons{font-size:15px;width:15px;height:15px;line-height:1}
 
     /* Stats */
     .ahm-stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;text-align:center}
@@ -383,6 +390,7 @@ function rmai_settings_page(): void {
     /* Endpoints */
     .ahm-ep-section{margin-bottom:4px}
     .ahm-ep-group{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:6px 0 4px;color:#94a3b8}
+    .ahm-ep-group .dashicons{font-size:13px;width:13px;height:13px;vertical-align:-2px;margin-right:2px}
     .ahm-ep-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f8fafc;font-size:12px}
     .ahm-ep-row:last-child{border-bottom:none}
     .ahm-method{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;font-family:monospace;flex-shrink:0;min-width:40px;text-align:center}
@@ -417,13 +425,13 @@ function rmai_settings_page(): void {
     <div id="ahm-wrap">
 
     <?php if ( isset( $notices[ $msg ] ) ) : [ $ntype, $ntext ] = $notices[ $msg ]; ?>
-    <div class="ahm-notice success">✓ <?php echo esc_html( $ntext ); ?></div>
+    <div class="ahm-notice success"><span class="dashicons dashicons-yes-alt"></span> <?php echo esc_html( $ntext ); ?></div>
     <?php endif; ?>
 
     <!-- HEADER -->
     <div class="ahm-header">
         <div class="ahm-header-left">
-            <div class="ahm-logo">⚡</div>
+            <div class="ahm-logo"><span class="dashicons dashicons-rest-api"></span></div>
             <div>
                 <h1>AHM Connect <span>v<?php echo esc_html( RMAI_VERSION ); ?></span></h1>
                 <p>API REST para gestión de contenido, SEO y automatización</p>
@@ -443,11 +451,11 @@ function rmai_settings_page(): void {
         </div>
         <?php if ( $api_enabled ) : ?>
             <a href="<?php echo esc_url( $toggle_url ); ?>" class="ahm-btn ahm-btn-danger" onclick="return confirm('¿Desactivar la API? La clave se rotará automáticamente.')">
-                <span>⏸</span> Desactivar API
+                <span class="dashicons dashicons-controls-pause"></span> Desactivar API
             </a>
         <?php else : ?>
             <a href="<?php echo esc_url( $toggle_url ); ?>" class="ahm-btn ahm-btn-success" onclick="return confirm('¿Activar la API? La clave se rotará automáticamente.')">
-                <span>▶</span> Activar API
+                <span class="dashicons dashicons-controls-play"></span> Activar API
             </a>
         <?php endif; ?>
     </div>
@@ -486,7 +494,7 @@ function rmai_settings_page(): void {
             <!-- API Key -->
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon blue">🔑</div>
+                    <div class="ahm-card-icon blue"><span class="dashicons dashicons-admin-network"></span></div>
                     <div class="ahm-card-title">API Key</div>
                 </div>
                 <div class="ahm-card-body">
@@ -499,7 +507,7 @@ function rmai_settings_page(): void {
                         <form method="post" style="margin:0">
                             <?php wp_nonce_field( 'rmai_regenerate_key_action' ); ?>
                             <button type="submit" name="rmai_regenerate_key" class="ahm-btn ahm-btn-ghost ahm-btn-sm" onclick="return confirm('¿Regenerar la clave? Los clientes actuales perderán acceso.')">
-                                🔄 Regenerar clave
+                                <span class="dashicons dashicons-update"></span> Regenerar clave
                             </button>
                         </form>
                         <span id="ahm-copied" style="color:#22c55e;font-size:12px;display:none">✓ Copiada</span>
@@ -514,7 +522,7 @@ function rmai_settings_page(): void {
             <!-- Info del sitio -->
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon green">🌐</div>
+                    <div class="ahm-card-icon green"><span class="dashicons dashicons-admin-site-alt3"></span></div>
                     <div class="ahm-card-title">Información del sitio</div>
                 </div>
                 <div class="ahm-card-body">
@@ -532,7 +540,7 @@ function rmai_settings_page(): void {
             <!-- Ajustes de seguridad -->
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon purple">🛡️</div>
+                    <div class="ahm-card-icon purple"><span class="dashicons dashicons-shield"></span></div>
                     <div class="ahm-card-title">Seguridad y límites</div>
                 </div>
                 <div class="ahm-card-body">
@@ -583,7 +591,7 @@ function rmai_settings_page(): void {
             <div class="ahm-card-body" style="column-count:2;column-gap:32px">
 
                 <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group">📄 Contenido y SEO</div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-media-document"></span> Contenido y SEO</div>
                     <?php
                     $endpoints = [
                         ['GET',    '/posts',                  'Listar entradas (?missing= ?seo_score_lt=)'],
@@ -607,7 +615,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group">📊 Auditoría SEO</div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-chart-bar"></span> Auditoría SEO</div>
                     <?php
                     $endpoints2 = [
                         ['GET',    '/seo/report',             'Dashboard ejecutivo: keywords, scores, alt, 404s'],
@@ -629,7 +637,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group">🤖 GEO — Buscadores IA</div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-search"></span> GEO — Buscadores IA</div>
                     <?php
                     $endpoints3 = [
                         ['GET',    '/seo/geo',                'Audit: robots.txt, llms.txt, schema, E-E-A-T'],
@@ -644,7 +652,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group">🖼️ Imágenes y Media</div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-format-image"></span> Imágenes y Media</div>
                     <?php
                     $endpoints4 = [
                         ['GET',    '/post/{id}/images',       'Imágenes del post + check alt/keyword'],
@@ -661,7 +669,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group">🔀 Redirections</div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-randomize"></span> Redirections</div>
                     <?php
                     $endpoints5 = [
                         ['GET',    '/redirections',           'Listar redirections Rank Math'],
@@ -676,7 +684,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group">📐 Schema JSON-LD</div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-editor-code"></span> Schema JSON-LD</div>
                     <?php
                     $endpoints6 = [
                         ['GET',    '/seo/schema/{id}',        'Leer schemas JSON-LD de un post'],
@@ -693,7 +701,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid">
-                    <div class="ahm-ep-group">🛒 WooCommerce</div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-cart"></span> WooCommerce</div>
                     <?php
                     $endpoints7 = [
                         ['POST',  '/bulk-attributes',          'Merge atributos _product_attributes'],
@@ -708,7 +716,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid">
-                    <div class="ahm-ep-group">🛠 Herramientas</div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-admin-tools"></span> Herramientas</div>
                     <?php
                     $endpoints8 = [
                         ['POST',  '/tools/flush-rewrite',      'Regenerar reglas de rewrite (sitemap 404, etc.)'],
@@ -730,12 +738,12 @@ function rmai_settings_page(): void {
         <div class="ahm-card">
             <div class="ahm-card-header" style="justify-content:space-between">
                 <div style="display:flex;align-items:center;gap:10px">
-                    <div class="ahm-card-icon slate">📋</div>
+                    <div class="ahm-card-icon slate"><span class="dashicons dashicons-clipboard"></span></div>
                     <div class="ahm-card-title">Últimas <?php echo $log_count; ?> peticiones</div>
                 </div>
                 <form method="post" style="margin:0">
                     <?php wp_nonce_field( 'rmai_clear_log_action' ); ?>
-                    <button type="submit" name="rmai_clear_log" class="ahm-btn ahm-btn-ghost ahm-btn-sm">🗑 Borrar log</button>
+                    <button type="submit" name="rmai_clear_log" class="ahm-btn ahm-btn-ghost ahm-btn-sm"><span class="dashicons dashicons-trash"></span> Borrar log</button>
                 </form>
             </div>
             <div style="overflow-x:auto">
@@ -826,7 +834,7 @@ function rmai_settings_page(): void {
         ?>
 
         <?php if ( $geo_error ) : ?>
-        <div class="ahm-notice" style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c">⚠️ <?php echo esc_html( $geo_error ); ?></div>
+        <div class="ahm-notice" style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c"><span class="dashicons dashicons-warning"></span> <?php echo esc_html( $geo_error ); ?></div>
         <?php endif; ?>
 
         <?php if ( $geo_data ) :
@@ -865,7 +873,7 @@ function rmai_settings_page(): void {
             <!-- Checks grid -->
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon blue">✅</div>
+                    <div class="ahm-card-icon blue"><span class="dashicons dashicons-yes-alt"></span></div>
                     <div class="ahm-card-title">Checks GEO</div>
                 </div>
                 <div class="ahm-card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -893,7 +901,7 @@ function rmai_settings_page(): void {
 
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon orange">📄</div>
+                    <div class="ahm-card-icon orange"><span class="dashicons dashicons-media-text"></span></div>
                     <div class="ahm-card-title">llms.txt</div>
                 </div>
                 <div class="ahm-card-body">
@@ -932,7 +940,7 @@ function rmai_settings_page(): void {
 
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon slate">🤖</div>
+                    <div class="ahm-card-icon slate"><span class="dashicons dashicons-admin-users"></span></div>
                     <div class="ahm-card-title">Bots IA en robots.txt</div>
                 </div>
                 <div class="ahm-card-body">
@@ -972,7 +980,7 @@ function rmai_settings_page(): void {
 
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon purple">📐</div>
+                    <div class="ahm-card-icon purple"><span class="dashicons dashicons-editor-code"></span></div>
                     <div class="ahm-card-title">Schema.org detectado</div>
                 </div>
                 <div class="ahm-card-body">
@@ -1005,7 +1013,7 @@ function rmai_settings_page(): void {
 
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon green">👤</div>
+                    <div class="ahm-card-icon green"><span class="dashicons dashicons-businessperson"></span></div>
                     <div class="ahm-card-title">E-E-A-T Signals</div>
                 </div>
                 <div class="ahm-card-body">
@@ -1047,23 +1055,23 @@ function rmai_settings_page(): void {
         <?php if ( ! empty( $recs ) ) : ?>
         <div class="ahm-card" style="margin-bottom:20px">
             <div class="ahm-card-header">
-                <div class="ahm-card-icon orange">💡</div>
+                <div class="ahm-card-icon orange"><span class="dashicons dashicons-lightbulb"></span></div>
                 <div class="ahm-card-title">Recomendaciones GEO</div>
             </div>
             <div class="ahm-card-body" style="display:flex;flex-direction:column;gap:10px">
                 <?php foreach ( $recs as $rec ) :
                     $prio   = $rec['priority'] ?? 'medium';
                     $pcolors = [
-                        'critical' => ['#fef2f2','#fecaca','#b91c1c','🔴'],
-                        'high'     => ['#fff7ed','#fed7aa','#c2410c','🟠'],
-                        'medium'   => ['#fffbeb','#fde68a','#92400e','🟡'],
-                        'low'      => ['#f0fdf4','#bbf7d0','#166534','🟢'],
+                        'critical' => ['#fef2f2','#fecaca','#b91c1c','#ef4444'],
+                        'high'     => ['#fff7ed','#fed7aa','#c2410c','#f97316'],
+                        'medium'   => ['#fffbeb','#fde68a','#92400e','#eab308'],
+                        'low'      => ['#f0fdf4','#bbf7d0','#166534','#22c55e'],
                     ];
-                    [ $bg, $border, $tc, $emoji ] = $pcolors[ $prio ] ?? $pcolors['medium'];
+                    [ $bg, $border, $tc, $dot ] = $pcolors[ $prio ] ?? $pcolors['medium'];
                 ?>
                 <div style="background:<?php echo $bg; ?>;border:1px solid <?php echo $border; ?>;border-radius:8px;padding:12px 14px">
                     <div style="display:flex;align-items:flex-start;gap:10px">
-                        <span style="font-size:14px;flex-shrink:0;margin-top:1px"><?php echo $emoji; ?></span>
+                        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:4px;background:<?php echo esc_attr( $dot ); ?>"></span>
                         <div>
                             <div style="font-size:12px;font-weight:600;color:<?php echo $tc; ?>;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px"><?php echo esc_html( $prio ); ?><?php echo $rec['file'] ? ' — ' . esc_html( $rec['file'] ) : ''; ?></div>
                             <div style="font-size:13px;color:#334155"><?php echo esc_html( $rec['action'] ); ?></div>
@@ -1080,7 +1088,7 @@ function rmai_settings_page(): void {
         <!-- SEO Scores de páginas -->
         <div class="ahm-card">
             <div class="ahm-card-header">
-                <div class="ahm-card-icon blue">📊</div>
+                <div class="ahm-card-icon blue"><span class="dashicons dashicons-chart-pie"></span></div>
                 <div class="ahm-card-title">Scores SEO del sitio (Rank Math)</div>
             </div>
             <div class="ahm-card-body">
@@ -1137,9 +1145,9 @@ function rmai_settings_page(): void {
                         <?php endif; ?>
                     </div>
                     <div style="display:flex;gap:16px;margin-top:6px">
-                        <span style="font-size:11px;color:#ef4444">⬛ Pobres: <?php echo $score_buckets['poor']; ?></span>
-                        <span style="font-size:11px;color:#f59e0b">⬛ Mejorables: <?php echo $score_buckets['ok']; ?></span>
-                        <span style="font-size:11px;color:#22c55e">⬛ Buenos: <?php echo $score_buckets['good']; ?></span>
+                        <span style="font-size:11px;color:#ef4444"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:currentColor"></span> Pobres: <?php echo $score_buckets['poor']; ?></span>
+                        <span style="font-size:11px;color:#f59e0b"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:currentColor"></span> Mejorables: <?php echo $score_buckets['ok']; ?></span>
+                        <span style="font-size:11px;color:#22c55e"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:currentColor"></span> Buenos: <?php echo $score_buckets['good']; ?></span>
                     </div>
                 </div>
                 <?php endif; ?>
@@ -1155,7 +1163,7 @@ function rmai_settings_page(): void {
             <!-- Estado / toggle -->
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon <?php echo $ahm_sites_enabled ? 'green' : 'slate'; ?>">🔗</div>
+                    <div class="ahm-card-icon <?php echo $ahm_sites_enabled ? 'green' : 'slate'; ?>"><span class="dashicons dashicons-admin-links"></span></div>
                     <div class="ahm-card-title">Conexión con AHM Sites</div>
                 </div>
                 <div class="ahm-card-body">
@@ -1167,16 +1175,16 @@ function rmai_settings_page(): void {
                             <div class="ahm-toggle-desc"><?php echo $ahm_sites_enabled ? 'Activado. El plugin reporta al panel cada 15 min.' : 'Desactivado. Actívalo para generar un código de emparejamiento.'; ?></div>
                         </div>
                         <a href="<?php echo esc_url( $ahm_sites_toggle_url ); ?>" class="ahm-btn <?php echo $ahm_sites_enabled ? 'ahm-btn-danger' : 'ahm-btn-success'; ?> ahm-btn-sm" onclick="return confirm('<?php echo $ahm_sites_enabled ? '¿Desactivar la conexión con AHM Sites?' : '¿Activar la conexión? Se generará un código de emparejamiento de un solo uso.'; ?>')">
-                            <?php echo $ahm_sites_enabled ? '⏸ Desactivar' : '▶ Activar'; ?>
+                            <?php echo $ahm_sites_enabled ? '<span class="dashicons dashicons-controls-pause"></span> Desactivar' : '<span class="dashicons dashicons-controls-play"></span> Activar'; ?>
                         </a>
                     </div>
 
                     <?php if ( $ahm_sites_new_code ) : ?>
                     <div style="margin-top:16px;padding:14px 16px;border-radius:10px;background:#fffbeb;border:1.5px solid #fde68a">
-                        <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px">⚠️ Código de emparejamiento — cópialo ahora, expira en 10 minutos y NO se volverá a mostrar</div>
+                        <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px"><span class="dashicons dashicons-warning" style="font-size:15px;width:15px;height:15px;vertical-align:-3px"></span> Código de emparejamiento — cópialo ahora, expira en 10 minutos y NO se volverá a mostrar</div>
                         <div class="ahm-key-wrap" style="margin-bottom:4px">
                             <input type="text" class="ahm-key-input" id="ahm-sites-code" value="<?php echo esc_attr( $ahm_sites_new_code ); ?>" readonly onclick="this.select()">
-                            <button class="ahm-copy-btn" title="Copiar código" onclick="ahmCopyGeneric('ahm-sites-code','ahm-sites-copied')">📋</button>
+                            <button class="ahm-copy-btn" title="Copiar código" onclick="ahmCopyGeneric('ahm-sites-code','ahm-sites-copied')"><span class="dashicons dashicons-clipboard"></span></button>
                         </div>
                         <span id="ahm-sites-copied" style="color:#22c55e;font-size:12px;display:none">✓ Copiado</span>
                         <div style="font-size:11px;color:#92400e;margin-top:4px">Pégalo en el panel AHM Sites para completar el emparejamiento de este sitio.</div>
@@ -1185,7 +1193,7 @@ function rmai_settings_page(): void {
                     <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:14px">
                         <input type="hidden" name="action" value="rmai_ahm_sites_generate_code">
                         <?php wp_nonce_field( 'rmai_ahm_sites_generate_code_action' ); ?>
-                        <button type="submit" class="ahm-btn ahm-btn-ghost ahm-btn-sm">🔄 Generar nuevo código de emparejamiento</button>
+                        <button type="submit" class="ahm-btn ahm-btn-ghost ahm-btn-sm"><span class="dashicons dashicons-update"></span> Generar nuevo código de emparejamiento</button>
                     </form>
                     <?php endif; ?>
 
@@ -1202,12 +1210,12 @@ function rmai_settings_page(): void {
             <!-- Rotación de clave -->
             <div class="ahm-card">
                 <div class="ahm-card-header">
-                    <div class="ahm-card-icon slate">🔁</div>
+                    <div class="ahm-card-icon slate"><span class="dashicons dashicons-image-rotate"></span></div>
                     <div class="ahm-card-title">Rotación de la clave AHM Sites</div>
                 </div>
                 <div class="ahm-card-body">
                     <p style="font-size:12px;color:#64748b;margin:0 0 12px">El secret de esta conexión (distinto de la API Key de arriba) lo rota automáticamente <strong>el panel AHM Sites</strong>, de forma firmada, sin intervención manual aquí.</p>
-                    <button type="button" class="ahm-btn ahm-btn-ghost ahm-btn-sm" disabled title="La rotación la inicia el panel AHM Sites, no este plugin">🔁 Rotar clave AHM Sites</button>
+                    <button type="button" class="ahm-btn ahm-btn-ghost ahm-btn-sm" disabled title="La rotación la inicia el panel AHM Sites, no este plugin"><span class="dashicons dashicons-image-rotate"></span> Rotar clave AHM Sites</button>
                     <div style="font-size:11px;color:#94a3b8;margin-top:8px">Este botón es informativo: la rotación se solicita siempre desde el panel.</div>
                 </div>
             </div>
@@ -5136,20 +5144,33 @@ add_filter( 'wp_resource_hints', function ( array $hints, string $relation ): ar
  * Desactiva el sistema de emojis de WordPress en el frontend.
  * Elimina wp-emoji-release.min.js y la detección — menos JS y peticiones.
  * (No afecta a los emojis del footer, que son un widget aparte.)
+ *
+ * No se toca el admin: los hooks de admin (admin-filters.php) se registran
+ * después de `init`, así que quitarlos aquí no surtía efecto. Tampoco se
+ * filtra `emoji_svg_url` a false: con svgUrl vacío, wp-emoji usa la base por
+ * defecto de twemoji (cdn.jsdelivr.net/gh/jdecked/twemoji@X/assets/) sin la
+ * carpeta svg/, y cada emoji del admin salía como imagen rota (404).
  */
 add_action( 'init', function (): void {
     remove_action( 'wp_head', 'print_emoji_detection_script', 7 );
     remove_action( 'wp_print_styles', 'print_emoji_styles' );
-    remove_action( 'admin_print_scripts', 'print_emoji_detection_script' );
-    remove_action( 'admin_print_styles', 'print_emoji_styles' );
     remove_filter( 'the_content_feed', 'wp_staticize_emoji' );
     remove_filter( 'comment_text_rss', 'wp_staticize_emoji' );
     remove_filter( 'wp_mail', 'wp_staticize_emoji_for_email' );
     add_filter( 'tiny_mce_plugins', function ( $plugins ) {
         return is_array( $plugins ) ? array_diff( $plugins, [ 'wpemoji' ] ) : [];
     } );
-    add_filter( 'emoji_svg_url', '__return_false' );
 } );
+
+/**
+ * En la pantalla del plugin (Ajustes → AHM Connect) no se carga wp-emoji:
+ * el panel usa dashicons y no necesita convertir emojis en <img> de twemoji.
+ * El resto del admin queda como lo deja WordPress.
+ */
+add_action( 'admin_enqueue_scripts', function ( $hook_suffix ): void {
+    if ( 'settings_page_ahm-connect' !== $hook_suffix ) return;
+    remove_action( 'admin_print_scripts', 'print_emoji_detection_script' );
+}, 1 );
 
 /**
  * Quita etiquetas innecesarias del <head> (RSD, wlwmanifest, generator).

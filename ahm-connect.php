@@ -3,7 +3,7 @@
  * Plugin Name: AHM Connect
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
- * Version:     3.7.2
+ * Version:     3.8.0-beta
  * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RMAI_VERSION',         '3.7.2' );
+define( 'RMAI_VERSION',         '3.8.0-beta' );
 define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );
@@ -31,6 +31,15 @@ define( 'RMAI_OPTION_AHM_SITES_SITE_ID',   'rmai_ahm_sites_site_id' );   // int:
 define( 'RMAI_OPTION_AHM_SITES_SECRET',    'rmai_ahm_sites_secret' );    // string: secret HMAC (64 hex), sensible, autoload=no
 define( 'RMAI_OPTION_AHM_SITES_PANEL_URL', 'rmai_ahm_sites_panel_url' ); // string: URL base del panel
 define( 'RMAI_AHM_SITES_CRON_HOOK',        'rmai_ahm_sites_checkin_event' );
+
+// ── Power Tools (v3.8.0) — bloque no-RCE: Gutenberg, Skills, Design, ──────
+//    Elementor clásico, subida de medios y lectura de ficheros.
+define( 'RMAI_SKILL_CPT',          'ahm_skill' );              // CPT privado para los playbooks Markdown
+define( 'RMAI_OPTION_DESIGN',      'rmai_design_direction' );  // array: dirección de diseño global del sitio
+define( 'RMAI_OPTION_SKILL_SEED',  'rmai_skill_builtin_seed' ); // flag: skill integrada ya sembrada
+define( 'RMAI_FILES_READ_MAX',     1048576 );                  // 1 MB: tope de lectura de un fichero
+define( 'RMAI_FILES_SCAN_MAX',     524288 );                   // 512 KB: tope para buscar dentro de un fichero
+define( 'RMAI_FILES_NODE_MAX',     3000 );                     // tope de nodos en /files/tree y /files/search
 
 // ═══════════════════════════════════════════════════════
 // 1. ACTIVACIÓN / DESACTIVACIÓN / DESINSTALACIÓN
@@ -60,6 +69,8 @@ function rmai_uninstall(): void {
     delete_option( RMAI_OPTION_AHM_SITES_SITE_ID );
     delete_option( RMAI_OPTION_AHM_SITES_SECRET );
     delete_option( RMAI_OPTION_AHM_SITES_PANEL_URL );
+    delete_option( RMAI_OPTION_DESIGN );
+    delete_option( RMAI_OPTION_SKILL_SEED );
 }
 
 function rmai_generate_key(): string {
@@ -711,6 +722,75 @@ function rmai_settings_page(): void {
                         ['POST',  '/tools/flush-rewrite',      'Regenerar reglas de rewrite (sitemap 404, etc.)'],
                     ];
                     foreach ( $endpoints8 as [$m,$p,$d] ) {
+                        $mc = strtolower( $m );
+                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
+                    }
+                    ?>
+                </div>
+
+                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
+                    <div class="ahm-ep-group">🧱 Gutenberg <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
+                    <?php
+                    $endpoints9 = [
+                        ['GET',   '/gutenberg/blocks',        'Listar bloques registrados'],
+                        ['POST',  '/gutenberg/validate',      'Dry-run: parsear y devolver árbol de bloques'],
+                        ['POST',  '/gutenberg/post',          'Crear post con bloques (sin kses)'],
+                        ['PUT',   '/gutenberg/post/{id}',     'Reescribir bloques de un post'],
+                    ];
+                    foreach ( $endpoints9 as [$m,$p,$d] ) {
+                        $mc = strtolower( $m );
+                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
+                    }
+                    ?>
+                </div>
+
+                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
+                    <div class="ahm-ep-group">📚 Skills <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
+                    <?php
+                    $endpoints10 = [
+                        ['GET',    '/skills',       'Listar skills con descripción'],
+                        ['POST',   '/skills',       'Crear skill {name, description, content}'],
+                        ['GET',    '/skills/{id}',  'Leer skill completa (Markdown)'],
+                        ['PUT',    '/skills/{id}',  'Actualizar skill'],
+                        ['DELETE', '/skills/{id}',  'Borrar skill'],
+                    ];
+                    foreach ( $endpoints10 as [$m,$p,$d] ) {
+                        $mc = strtolower( $m );
+                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
+                    }
+                    ?>
+                </div>
+
+                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
+                    <div class="ahm-ep-group">🎨 Design <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
+                    <?php
+                    $endpoints11 = [
+                        ['GET',    '/design',                          'Leer dirección de diseño global'],
+                        ['PUT',    '/design',                          'Guardar paleta/tipo/espaciado/tono/reglas'],
+                        ['DELETE', '/design',                          'Restablecer dirección de diseño'],
+                        ['GET',    '/design/elementor-kit',            'Leer Kit clásico (colores, tipo, CSS)'],
+                        ['POST',   '/design/elementor-kit',            'Escribir Kit clásico + regenerar CSS'],
+                        ['POST',   '/design/elementor-regenerate-css', 'Regenerar CSS global de Elementor'],
+                    ];
+                    foreach ( $endpoints11 as [$m,$p,$d] ) {
+                        $mc = strtolower( $m );
+                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
+                    }
+                    ?>
+                </div>
+
+                <div class="ahm-ep-section" style="break-inside:avoid">
+                    <div class="ahm-ep-group">⚡ Power Tools <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
+                    <?php
+                    $endpoints12 = [
+                        ['POST',  '/post/{id}/elementor-section', 'Insertar sección Elementor clásico'],
+                        ['POST',  '/media/upload',               'Subir medio por URL o base64'],
+                        ['GET',   '/files/list',                 'Listar directorio (bajo ABSPATH)'],
+                        ['GET',   '/files/tree',                 'Árbol con profundidad (solo lectura)'],
+                        ['GET',   '/files/read',                 'Leer fichero de texto (solo lectura)'],
+                        ['GET',   '/files/search',               'Buscar por nombre/contenido (lectura)'],
+                    ];
+                    foreach ( $endpoints12 as [$m,$p,$d] ) {
                         $mc = strtolower( $m );
                         echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
                     }
@@ -5249,6 +5329,1034 @@ function rmai_log_internal_event( string $route ): void {
     }
 
     update_option( RMAI_LOG_OPTION, $log );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 19. POWER TOOLS (v3.8.0) — Gutenberg, Skills, Design, Elementor clásico,
+//     subida de medios y lectura de ficheros.
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Bloque "no-RCE": amplía lo que la IA puede hacer sin introducir ejecución de
+// código arbitrario. NO incluye (por decisión de producto, al ir todo con la
+// misma key diaria única que se autoactualiza en toda la flota): ejecutar PHP,
+// escribir/editar/borrar ficheros, WP-CLI, instalar plugins/temas ni enlaces de
+// login admin. Con esa key cualquiera de esas capacidades sería RCE en todas las
+// webs. Aquí solo hay: creación/edición de contenido (Gutenberg/Elementor),
+// metadatos de diseño, subida de MEDIOS y LECTURA de ficheros.
+//
+// Todas las rutas usan rmai_check_permission (misma auth, rate limit y log) y
+// las acciones de escritura dejan una entrada de auditoría en el log existente.
+
+/**
+ * Auditoría de una acción power-tools en el mismo log que ve el admin.
+ * Añade el detalle (fichero, post, recurso) al final de la ruta para que sea
+ * visible en la pestaña "Log" sin tocar la tabla de la UI.
+ */
+function rmai_power_audit( string $route, string $detail, int $status ): void {
+    $settings = wp_parse_args( get_option( RMAI_OPTION_SETTINGS, [] ), rmai_default_settings() );
+    if ( empty( $settings['log_enabled'] ) ) {
+        return;
+    }
+    $log   = get_option( RMAI_LOG_OPTION, [] );
+    $log[] = [
+        'date'   => current_time( 'Y-m-d H:i:s' ),
+        'method' => 'POWER',
+        'route'  => $route . ( '' !== $detail ? '  ·  ' . $detail : '' ),
+        'status' => $status,
+        'ip'     => rmai_get_ip(),
+    ];
+    if ( count( $log ) > RMAI_LOG_MAX ) {
+        $log = array_slice( $log, -RMAI_LOG_MAX );
+    }
+    update_option( RMAI_LOG_OPTION, $log );
+}
+
+// ── Registro de rutas power-tools ────────────────────────────────────────────
+add_action( 'rest_api_init', 'rmai_register_power_routes' );
+function rmai_register_power_routes(): void {
+    $perm = 'rmai_check_permission';
+
+    // Gutenberg
+    register_rest_route( RMAI_NAMESPACE, '/gutenberg/blocks', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'rmai_gutenberg_blocks',
+        'permission_callback' => $perm,
+    ] );
+    register_rest_route( RMAI_NAMESPACE, '/gutenberg/validate', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_gutenberg_validate',
+        'permission_callback' => $perm,
+    ] );
+    register_rest_route( RMAI_NAMESPACE, '/gutenberg/post', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_gutenberg_create',
+        'permission_callback' => $perm,
+    ] );
+    register_rest_route( RMAI_NAMESPACE, '/gutenberg/post/(?P<id>\d+)', [
+        'methods'             => 'PUT, PATCH',
+        'callback'            => 'rmai_gutenberg_update',
+        'permission_callback' => $perm,
+    ] );
+
+    // Skills
+    register_rest_route( RMAI_NAMESPACE, '/skills', [
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'rmai_skills_list',
+            'permission_callback' => $perm,
+        ],
+        [
+            'methods'             => WP_REST_Server::CREATABLE,
+            'callback'            => 'rmai_skills_create',
+            'permission_callback' => $perm,
+        ],
+    ] );
+    register_rest_route( RMAI_NAMESPACE, '/skills/(?P<id>\d+)', [
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'rmai_skills_get',
+            'permission_callback' => $perm,
+        ],
+        [
+            'methods'             => 'PUT, PATCH',
+            'callback'            => 'rmai_skills_update',
+            'permission_callback' => $perm,
+        ],
+        [
+            'methods'             => WP_REST_Server::DELETABLE,
+            'callback'            => 'rmai_skills_delete',
+            'permission_callback' => $perm,
+        ],
+    ] );
+
+    // Design
+    register_rest_route( RMAI_NAMESPACE, '/design', [
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'rmai_design_get',
+            'permission_callback' => $perm,
+        ],
+        [
+            'methods'             => 'PUT, PATCH, POST',
+            'callback'            => 'rmai_design_set',
+            'permission_callback' => $perm,
+        ],
+        [
+            'methods'             => WP_REST_Server::DELETABLE,
+            'callback'            => 'rmai_design_reset',
+            'permission_callback' => $perm,
+        ],
+    ] );
+    register_rest_route( RMAI_NAMESPACE, '/design/elementor-kit', [
+        [
+            'methods'             => WP_REST_Server::READABLE,
+            'callback'            => 'rmai_elementor_kit_get',
+            'permission_callback' => $perm,
+        ],
+        [
+            'methods'             => 'PUT, PATCH, POST',
+            'callback'            => 'rmai_elementor_kit_set',
+            'permission_callback' => $perm,
+        ],
+    ] );
+    register_rest_route( RMAI_NAMESPACE, '/design/elementor-regenerate-css', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_elementor_regenerate_css',
+        'permission_callback' => $perm,
+    ] );
+
+    // Elementor clásico — insertar sección
+    register_rest_route( RMAI_NAMESPACE, '/post/(?P<id>\d+)/elementor-section', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_elementor_section',
+        'permission_callback' => $perm,
+    ] );
+
+    // Subida de medios
+    register_rest_route( RMAI_NAMESPACE, '/media/upload', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_media_upload',
+        'permission_callback' => $perm,
+    ] );
+
+    // Ficheros — SOLO LECTURA
+    register_rest_route( RMAI_NAMESPACE, '/files/list', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'rmai_files_list',
+        'permission_callback' => $perm,
+    ] );
+    register_rest_route( RMAI_NAMESPACE, '/files/tree', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'rmai_files_tree',
+        'permission_callback' => $perm,
+    ] );
+    register_rest_route( RMAI_NAMESPACE, '/files/read', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'rmai_files_read',
+        'permission_callback' => $perm,
+    ] );
+    register_rest_route( RMAI_NAMESPACE, '/files/search', [
+        'methods'             => WP_REST_Server::READABLE,
+        'callback'            => 'rmai_files_search',
+        'permission_callback' => $perm,
+    ] );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19.1 GUTENBERG
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** GET /gutenberg/blocks — lista los tipos de bloque registrados. */
+function rmai_gutenberg_blocks() {
+    $out = [];
+    if ( class_exists( 'WP_Block_Type_Registry' ) ) {
+        foreach ( WP_Block_Type_Registry::get_instance()->get_all_registered() as $name => $type ) {
+            $out[] = [
+                'name'     => $name,
+                'title'    => $type->title ?? '',
+                'category' => $type->category ?? null,
+                'keywords' => $type->keywords ?? [],
+            ];
+        }
+    }
+    sort( $out );
+    return new WP_REST_Response( [ 'total' => count( $out ), 'blocks' => $out ], 200 );
+}
+
+/**
+ * POST /gutenberg/validate — dry-run puro: parsea el markup de bloques y
+ * devuelve el árbol + si reserializa de forma estable. No escribe nada.
+ */
+function rmai_gutenberg_validate( WP_REST_Request $request ) {
+    $body    = $request->get_json_params();
+    $content = isset( $body['content'] ) ? (string) $body['content'] : '';
+    if ( '' === $content ) {
+        return new WP_Error( 'rmai_missing', 'Incluye {content} con el markup de bloques.', [ 'status' => 400 ] );
+    }
+    return new WP_REST_Response( rmai_gutenberg_inspect( $content ), 200 );
+}
+
+/** Parsea y analiza un markup de bloques (helper compartido). */
+function rmai_gutenberg_inspect( string $content ): array {
+    $blocks       = parse_blocks( $content );
+    $reserialized = serialize_blocks( $blocks );
+    $named        = array_values( array_filter( array_map(
+        static function ( $b ) { return $b['blockName'] ?? null; },
+        $blocks
+    ) ) );
+    return [
+        'blocks_count' => count( $named ),
+        'block_names'  => $named,
+        'tree'         => $blocks,
+        'stable'       => ( trim( $reserialized ) === trim( $content ) ),
+        'reserialized' => $reserialized,
+    ];
+}
+
+/**
+ * Ejecuta una escritura de post saltándose kses (para no romper atributos de
+ * bloques de terceros) y restaurando siempre los filtros kses después.
+ */
+function rmai_gutenberg_write_post( array $postarr ) {
+    kses_remove_filters();
+    try {
+        return wp_insert_post( wp_slash( $postarr ), true );
+    } finally {
+        kses_init_filters();
+    }
+}
+
+/** POST /gutenberg/post — crea un post con contenido de bloques. */
+function rmai_gutenberg_create( WP_REST_Request $request ) {
+    $body = $request->get_json_params();
+    if ( empty( $body['title'] ) && empty( $body['content'] ) ) {
+        return new WP_Error( 'rmai_missing', 'Incluye al menos {title} o {content}.', [ 'status' => 400 ] );
+    }
+
+    $content = isset( $body['content'] ) ? (string) $body['content'] : '';
+    $inspect = rmai_gutenberg_inspect( $content );
+
+    if ( ! empty( $body['dry_run'] ) ) {
+        return new WP_REST_Response( [ 'dry_run' => true, 'would_create' => true ] + $inspect, 200 );
+    }
+
+    $allowed_types = array_keys( get_post_types( [ 'public' => true ] ) );
+    $post_type     = isset( $body['post_type'] ) && in_array( $body['post_type'], $allowed_types, true )
+        ? $body['post_type'] : 'post';
+
+    $postarr = [
+        'post_title'   => sanitize_text_field( $body['title'] ?? '' ),
+        'post_content' => $content,
+        'post_excerpt' => isset( $body['post_excerpt'] ) ? wp_kses_post( $body['post_excerpt'] ) : '',
+        'post_status'  => isset( $body['status'] ) && in_array( $body['status'], [ 'publish', 'draft', 'private', 'pending' ], true )
+            ? $body['status'] : 'draft',
+        'post_type'    => $post_type,
+    ];
+    if ( ! empty( $body['slug'] ) ) {
+        $postarr['post_name'] = sanitize_title( $body['slug'] );
+    }
+
+    $post_id = rmai_gutenberg_write_post( $postarr );
+    if ( is_wp_error( $post_id ) ) {
+        rmai_power_audit( 'POST /gutenberg/post', 'error: ' . $post_id->get_error_message(), 500 );
+        return new WP_Error( 'rmai_create_failed', $post_id->get_error_message(), [ 'status' => 500 ] );
+    }
+
+    rmai_power_audit( 'POST /gutenberg/post', 'post #' . $post_id . ' (' . $inspect['blocks_count'] . ' bloques)', 201 );
+    return new WP_REST_Response( [
+        'success'      => true,
+        'post_id'      => $post_id,
+        'url'          => get_permalink( $post_id ),
+        'status'       => $postarr['post_status'],
+        'blocks_count' => $inspect['blocks_count'],
+    ], 201 );
+}
+
+/** PUT /gutenberg/post/{id} — reescribe el contenido de bloques de un post. */
+function rmai_gutenberg_update( WP_REST_Request $request ) {
+    $post = get_post( (int) $request->get_param( 'id' ) );
+    if ( ! $post ) {
+        return new WP_Error( 'rmai_not_found', 'Entrada no encontrada.', [ 'status' => 404 ] );
+    }
+    if ( rmai_content_write_blocked( $post ) ) {
+        return new WP_Error( 'rmai_content_write_blocked', 'Esta página se edita con Elementor: usa /post/{id}/meta o /elementor-section.', [ 'status' => 409 ] );
+    }
+
+    $body = $request->get_json_params();
+    if ( ! isset( $body['content'] ) && ! isset( $body['title'] ) ) {
+        return new WP_Error( 'rmai_missing', 'Incluye {content} y/o {title}.', [ 'status' => 400 ] );
+    }
+
+    $inspect = isset( $body['content'] ) ? rmai_gutenberg_inspect( (string) $body['content'] ) : null;
+
+    if ( ! empty( $body['dry_run'] ) ) {
+        return new WP_REST_Response( [ 'dry_run' => true, 'post_id' => $post->ID ] + ( $inspect ?: [] ), 200 );
+    }
+
+    $postarr = [ 'ID' => $post->ID ];
+    if ( isset( $body['content'] ) ) {
+        $postarr['post_content'] = (string) $body['content'];
+    }
+    if ( isset( $body['title'] ) ) {
+        $postarr['post_title'] = sanitize_text_field( $body['title'] );
+    }
+    if ( isset( $body['status'] ) && in_array( $body['status'], [ 'publish', 'draft', 'private', 'pending' ], true ) ) {
+        $postarr['post_status'] = $body['status'];
+    }
+
+    $res = rmai_gutenberg_write_post( $postarr );
+    if ( is_wp_error( $res ) ) {
+        rmai_power_audit( 'PUT /gutenberg/post/' . $post->ID, 'error: ' . $res->get_error_message(), 500 );
+        return new WP_Error( 'rmai_update_failed', $res->get_error_message(), [ 'status' => 500 ] );
+    }
+
+    rmai_power_audit( 'PUT /gutenberg/post/' . $post->ID, 'actualizado' . ( $inspect ? ' (' . $inspect['blocks_count'] . ' bloques)' : '' ), 200 );
+    return new WP_REST_Response( [
+        'success'      => true,
+        'post_id'      => $post->ID,
+        'url'          => get_permalink( $post->ID ),
+        'blocks_count' => $inspect['blocks_count'] ?? null,
+    ], 200 );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19.2 SKILLS (playbooks Markdown)
+// ─────────────────────────────────────────────────────────────────────────────
+
+add_action( 'init', 'rmai_register_skill_cpt' );
+function rmai_register_skill_cpt(): void {
+    register_post_type( RMAI_SKILL_CPT, [
+        'labels'          => [ 'name' => 'AHM Skills', 'singular_name' => 'AHM Skill' ],
+        'public'          => false,
+        'show_ui'         => false,
+        'show_in_rest'    => false,
+        'hierarchical'    => false,
+        'supports'        => [ 'title', 'editor', 'excerpt' ],
+        'capability_type' => 'post',
+    ] );
+    rmai_skills_seed_builtin();
+}
+
+/** Siembra una vez la skill integrada que explica cómo escribir skills. */
+function rmai_skills_seed_builtin(): void {
+    if ( get_option( RMAI_OPTION_SKILL_SEED ) ) {
+        return;
+    }
+    $content = "# Cómo escribir una skill de AHM Connect\n\n"
+        . "Una *skill* es un playbook en Markdown que la IA lee y sigue cuando su **descripción** encaja con lo que pide el usuario.\n\n"
+        . "## Estructura recomendada\n"
+        . "1. **Nombre** corto y accionable (p. ej. \"Publicar nota de prensa\").\n"
+        . "2. **Descripción** de una frase: *cuándo* usarla. La IA elige la skill por esta frase, así que sé específico.\n"
+        . "3. **Contenido**: pasos numerados, con los endpoints AHM Connect exactos a llamar y en qué orden.\n\n"
+        . "## Buenas prácticas\n"
+        . "- Un objetivo por skill.\n"
+        . "- Indica los endpoints reales (`POST /gutenberg/post`, `PUT /post/{id}`, etc.) y los campos clave.\n"
+        . "- Usa `dry_run` antes de escribir cuando exista.\n"
+        . "- Para páginas Elementor, nunca toques `post_content`: usa `/post/{id}/meta` o `/post/{id}/elementor-section`.\n"
+        . "- Lee antes `GET /design` para respetar la dirección de diseño del sitio.\n\n"
+        . "## Cómo guardar una skill nueva\n"
+        . "`POST /skills` con `{name, description, content}`. Lístalas con `GET /skills` (devuelve nombre + descripción para elegir) y lee una con `GET /skills/{id}`.\n";
+
+    $id = wp_insert_post( [
+        'post_type'    => RMAI_SKILL_CPT,
+        'post_status'  => 'publish',
+        'post_title'   => 'Cómo escribir skills',
+        'post_excerpt' => 'Meta-skill: explica el formato y las buenas prácticas para crear nuevas skills en este sitio.',
+        'post_content' => $content,
+    ], true );
+
+    if ( ! is_wp_error( $id ) ) {
+        update_option( RMAI_OPTION_SKILL_SEED, 1 );
+    }
+}
+
+/** Serializa una skill (CPT) a array de respuesta. */
+function rmai_skill_to_array( WP_Post $p, bool $with_content = false ): array {
+    $out = [
+        'id'          => $p->ID,
+        'name'        => $p->post_title,
+        'slug'        => $p->post_name,
+        'description' => $p->post_excerpt,
+        'modified'    => $p->post_modified,
+    ];
+    if ( $with_content ) {
+        $out['content'] = $p->post_content;
+    }
+    return $out;
+}
+
+/** GET /skills — lista con nombre + descripción (para que la IA elija). */
+function rmai_skills_list() {
+    $posts = get_posts( [
+        'post_type'      => RMAI_SKILL_CPT,
+        'post_status'    => 'publish',
+        'posts_per_page' => -1,
+        'orderby'        => 'title',
+        'order'          => 'ASC',
+    ] );
+    $items = array_map( static function ( $p ) { return rmai_skill_to_array( $p, false ); }, $posts );
+    return new WP_REST_Response( [ 'total' => count( $items ), 'skills' => $items ], 200 );
+}
+
+/** GET /skills/{id} — skill completa, con contenido Markdown. */
+function rmai_skills_get( WP_REST_Request $request ) {
+    $p = get_post( (int) $request->get_param( 'id' ) );
+    if ( ! $p || RMAI_SKILL_CPT !== $p->post_type ) {
+        return new WP_Error( 'rmai_not_found', 'Skill no encontrada.', [ 'status' => 404 ] );
+    }
+    return new WP_REST_Response( rmai_skill_to_array( $p, true ), 200 );
+}
+
+/** POST /skills — crea una skill {name, description, content}. */
+function rmai_skills_create( WP_REST_Request $request ) {
+    $body = $request->get_json_params();
+    if ( empty( $body['name'] ) || ! isset( $body['content'] ) ) {
+        return new WP_Error( 'rmai_missing', 'Incluye {name, content} (description recomendada).', [ 'status' => 400 ] );
+    }
+    $id = wp_insert_post( [
+        'post_type'    => RMAI_SKILL_CPT,
+        'post_status'  => 'publish',
+        'post_title'   => sanitize_text_field( $body['name'] ),
+        'post_excerpt' => isset( $body['description'] ) ? sanitize_text_field( $body['description'] ) : '',
+        'post_content' => (string) $body['content'],
+    ], true );
+    if ( is_wp_error( $id ) ) {
+        return new WP_Error( 'rmai_create_failed', $id->get_error_message(), [ 'status' => 500 ] );
+    }
+    rmai_power_audit( 'POST /skills', 'skill #' . $id . ' "' . sanitize_text_field( $body['name'] ) . '"', 201 );
+    return new WP_REST_Response( rmai_skill_to_array( get_post( $id ), true ), 201 );
+}
+
+/** PUT /skills/{id} — actualiza una skill. */
+function rmai_skills_update( WP_REST_Request $request ) {
+    $p = get_post( (int) $request->get_param( 'id' ) );
+    if ( ! $p || RMAI_SKILL_CPT !== $p->post_type ) {
+        return new WP_Error( 'rmai_not_found', 'Skill no encontrada.', [ 'status' => 404 ] );
+    }
+    $body    = $request->get_json_params();
+    $postarr = [ 'ID' => $p->ID ];
+    if ( isset( $body['name'] ) ) {
+        $postarr['post_title'] = sanitize_text_field( $body['name'] );
+    }
+    if ( isset( $body['description'] ) ) {
+        $postarr['post_excerpt'] = sanitize_text_field( $body['description'] );
+    }
+    if ( isset( $body['content'] ) ) {
+        $postarr['post_content'] = (string) $body['content'];
+    }
+    $res = wp_update_post( wp_slash( $postarr ), true );
+    if ( is_wp_error( $res ) ) {
+        return new WP_Error( 'rmai_update_failed', $res->get_error_message(), [ 'status' => 500 ] );
+    }
+    rmai_power_audit( 'PUT /skills/' . $p->ID, 'actualizada', 200 );
+    return new WP_REST_Response( rmai_skill_to_array( get_post( $p->ID ), true ), 200 );
+}
+
+/** DELETE /skills/{id} — borra una skill. */
+function rmai_skills_delete( WP_REST_Request $request ) {
+    $p = get_post( (int) $request->get_param( 'id' ) );
+    if ( ! $p || RMAI_SKILL_CPT !== $p->post_type ) {
+        return new WP_Error( 'rmai_not_found', 'Skill no encontrada.', [ 'status' => 404 ] );
+    }
+    wp_delete_post( $p->ID, true );
+    rmai_power_audit( 'DELETE /skills/' . $p->ID, 'borrada', 200 );
+    return new WP_REST_Response( [ 'success' => true, 'deleted' => $p->ID ], 200 );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19.3 DESIGN (dirección de diseño global + Kit clásico de Elementor)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Estructura por defecto de la dirección de diseño. */
+function rmai_design_defaults(): array {
+    return [
+        'palette'    => [], // [{name, color}]
+        'typography' => [], // {headings, body, ...}
+        'spacing'    => [], // {base, scale, ...}
+        'tone'       => '', // voz/tono de marca
+        'rules'      => '', // reglas libres en texto que la IA debe respetar
+    ];
+}
+
+/** GET /design — lee la dirección de diseño global. */
+function rmai_design_get() {
+    $design = wp_parse_args( (array) get_option( RMAI_OPTION_DESIGN, [] ), rmai_design_defaults() );
+    return new WP_REST_Response( $design, 200 );
+}
+
+/** PUT /design — fusiona y guarda la dirección de diseño. */
+function rmai_design_set( WP_REST_Request $request ) {
+    $body = $request->get_json_params();
+    if ( ! is_array( $body ) || empty( $body ) ) {
+        return new WP_Error( 'rmai_missing', 'Envía al menos una clave: palette, typography, spacing, tone o rules.', [ 'status' => 400 ] );
+    }
+    $current = wp_parse_args( (array) get_option( RMAI_OPTION_DESIGN, [] ), rmai_design_defaults() );
+    foreach ( [ 'palette', 'typography', 'spacing' ] as $k ) {
+        if ( isset( $body[ $k ] ) && is_array( $body[ $k ] ) ) {
+            $current[ $k ] = $body[ $k ];
+        }
+    }
+    foreach ( [ 'tone', 'rules' ] as $k ) {
+        if ( isset( $body[ $k ] ) ) {
+            $current[ $k ] = wp_kses_post( (string) $body[ $k ] );
+        }
+    }
+    update_option( RMAI_OPTION_DESIGN, $current );
+    rmai_power_audit( 'PUT /design', 'claves: ' . implode( ', ', array_keys( $body ) ), 200 );
+    return new WP_REST_Response( [ 'success' => true ] + $current, 200 );
+}
+
+/** DELETE /design — restablece la dirección de diseño. */
+function rmai_design_reset() {
+    delete_option( RMAI_OPTION_DESIGN );
+    rmai_power_audit( 'DELETE /design', 'restablecida', 200 );
+    return new WP_REST_Response( [ 'success' => true ] + rmai_design_defaults(), 200 );
+}
+
+/** Devuelve el ID del Kit activo de Elementor o 0. */
+function rmai_elementor_kit_id(): int {
+    return (int) get_option( 'elementor_active_kit', 0 );
+}
+
+/**
+ * GET /design/elementor-kit — lee colores y tipografías globales y el CSS
+ * personalizado del Kit CLÁSICO de Elementor (v3, nada atómico/V4).
+ */
+function rmai_elementor_kit_get() {
+    if ( ! class_exists( '\\Elementor\\Plugin' ) ) {
+        return new WP_Error( 'rmai_no_elementor', 'Elementor no está activo.', [ 'status' => 400 ] );
+    }
+    $kit_id = rmai_elementor_kit_id();
+    if ( ! $kit_id ) {
+        return new WP_Error( 'rmai_no_kit', 'No hay Kit de Elementor activo.', [ 'status' => 400 ] );
+    }
+    $settings = get_post_meta( $kit_id, '_elementor_page_settings', true );
+    $settings = is_array( $settings ) ? $settings : [];
+    return new WP_REST_Response( [
+        'kit_id'             => $kit_id,
+        'system_colors'      => $settings['system_colors'] ?? [],
+        'custom_colors'      => $settings['custom_colors'] ?? [],
+        'system_typography'  => $settings['system_typography'] ?? [],
+        'custom_typography'  => $settings['custom_typography'] ?? [],
+        'custom_css'         => $settings['custom_css'] ?? '',
+    ], 200 );
+}
+
+/**
+ * POST /design/elementor-kit — escribe colores/tipografías/CSS del Kit clásico
+ * y regenera el CSS global. Solo toca las claves enviadas.
+ */
+function rmai_elementor_kit_set( WP_REST_Request $request ) {
+    if ( ! class_exists( '\\Elementor\\Plugin' ) ) {
+        return new WP_Error( 'rmai_no_elementor', 'Elementor no está activo.', [ 'status' => 400 ] );
+    }
+    $kit_id = rmai_elementor_kit_id();
+    if ( ! $kit_id ) {
+        return new WP_Error( 'rmai_no_kit', 'No hay Kit de Elementor activo.', [ 'status' => 400 ] );
+    }
+    $body = $request->get_json_params();
+    if ( ! is_array( $body ) || empty( $body ) ) {
+        return new WP_Error( 'rmai_missing', 'Envía system_colors, custom_colors, system_typography, custom_typography o custom_css.', [ 'status' => 400 ] );
+    }
+
+    $settings = get_post_meta( $kit_id, '_elementor_page_settings', true );
+    $settings = is_array( $settings ) ? $settings : [];
+    $changed  = [];
+    foreach ( [ 'system_colors', 'custom_colors', 'system_typography', 'custom_typography' ] as $k ) {
+        if ( isset( $body[ $k ] ) && is_array( $body[ $k ] ) ) {
+            $settings[ $k ] = $body[ $k ];
+            $changed[]      = $k;
+        }
+    }
+    if ( isset( $body['custom_css'] ) ) {
+        $settings['custom_css'] = (string) $body['custom_css'];
+        $changed[]              = 'custom_css';
+    }
+    if ( empty( $changed ) ) {
+        return new WP_Error( 'rmai_missing', 'Ninguna clave válida en el cuerpo.', [ 'status' => 400 ] );
+    }
+
+    update_post_meta( $kit_id, '_elementor_page_settings', wp_slash( $settings ) );
+    rmai_elementor_regenerate_css_internal();
+    rmai_power_audit( 'POST /design/elementor-kit', 'kit #' . $kit_id . ' · ' . implode( ', ', $changed ), 200 );
+
+    return new WP_REST_Response( [ 'success' => true, 'kit_id' => $kit_id, 'updated' => $changed ], 200 );
+}
+
+/** Regenera el CSS global de Elementor (si está disponible). */
+function rmai_elementor_regenerate_css_internal(): bool {
+    if ( ! class_exists( '\\Elementor\\Plugin' ) ) {
+        return false;
+    }
+    try {
+        $instance = \Elementor\Plugin::$instance;
+        if ( isset( $instance->files_manager ) ) {
+            $instance->files_manager->clear_cache();
+            return true;
+        }
+    } catch ( \Throwable $e ) {
+        return false;
+    }
+    return false;
+}
+
+/** POST /design/elementor-regenerate-css — fuerza la regeneración del CSS. */
+function rmai_elementor_regenerate_css() {
+    if ( ! class_exists( '\\Elementor\\Plugin' ) ) {
+        return new WP_Error( 'rmai_no_elementor', 'Elementor no está activo.', [ 'status' => 400 ] );
+    }
+    $ok = rmai_elementor_regenerate_css_internal();
+    rmai_power_audit( 'POST /design/elementor-regenerate-css', $ok ? 'ok' : 'no disponible', $ok ? 200 : 500 );
+    return new WP_REST_Response( [ 'success' => $ok ], $ok ? 200 : 500 );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19.4 ELEMENTOR CLÁSICO — insertar sección
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /post/{id}/elementor-section
+ *
+ * Inserta uno o varios elementos de nivel superior (sección/contenedor clásico
+ * con sus columnas y widgets) dentro de _elementor_data en una posición dada.
+ * Reutiliza la escritura segura (rmai_write_elementor_data) y, tras escribir,
+ * verifica que el árbol conserva exactamente los nodos previos + los nuevos; si
+ * no, revierte. Limpia el CSS del post. Admite dry_run.
+ *
+ * Body: { section: <elemento|array de elementos>, position?: int|'start'|'end', dry_run?: bool }
+ */
+function rmai_elementor_section( WP_REST_Request $request ) {
+    $post = get_post( (int) $request->get_param( 'id' ) );
+    if ( ! $post ) {
+        return new WP_Error( 'rmai_not_found', 'Entrada no encontrada.', [ 'status' => 404 ] );
+    }
+    if ( ! rmai_is_elementor_post( $post->ID ) ) {
+        return new WP_Error( 'rmai_not_elementor', 'El post no está en modo Elementor (builder).', [ 'status' => 400 ] );
+    }
+
+    $body    = $request->get_json_params();
+    $section = $body['section'] ?? null;
+    if ( empty( $section ) || ! is_array( $section ) ) {
+        return new WP_Error( 'rmai_missing', 'Incluye {section} con el/los elemento(s) de Elementor a insertar.', [ 'status' => 400 ] );
+    }
+    // Permitir un único elemento o un array de elementos.
+    if ( isset( $section['elType'] ) ) {
+        $section = [ $section ];
+    }
+    foreach ( $section as $el ) {
+        if ( ! is_array( $el ) || ! isset( $el['elType'] ) ) {
+            return new WP_Error( 'rmai_bad_section', 'Cada elemento debe ser un objeto Elementor con "elType".', [ 'status' => 400 ] );
+        }
+    }
+
+    $raw  = (string) get_post_meta( $post->ID, '_elementor_data', true );
+    $data = '' !== $raw ? json_decode( $raw, true ) : [];
+    if ( ! is_array( $data ) ) {
+        return new WP_Error( 'rmai_bad_data', '_elementor_data existente no es JSON válido; abortado.', [ 'status' => 500 ] );
+    }
+
+    $nodes_before   = rmai_count_eltype_nodes( $data );
+    $nodes_section  = rmai_count_eltype_nodes( $section );
+    $position       = $body['position'] ?? 'end';
+    $total          = count( $data );
+
+    if ( 'start' === $position ) {
+        array_splice( $data, 0, 0, $section );
+        $pos_label = 'start';
+    } elseif ( 'end' === $position || null === $position ) {
+        $data      = array_merge( $data, $section );
+        $pos_label = 'end';
+    } else {
+        $idx = max( 0, min( (int) $position, $total ) );
+        array_splice( $data, $idx, 0, $section );
+        $pos_label = (string) $idx;
+    }
+
+    // Mismo codificador que usa Elementor al guardar, para no alterar el escapado.
+    $new_json = wp_json_encode( $data );
+    if ( false === $new_json ) {
+        return new WP_Error( 'rmai_encode_failed', 'No se pudo codificar el nuevo _elementor_data.', [ 'status' => 500 ] );
+    }
+
+    if ( ! empty( $body['dry_run'] ) ) {
+        return new WP_REST_Response( [
+            'dry_run'        => true,
+            'post_id'        => $post->ID,
+            'position'       => $pos_label,
+            'nodes_before'   => $nodes_before,
+            'nodes_added'    => $nodes_section,
+            'nodes_expected' => $nodes_before + $nodes_section,
+            'bytes'          => strlen( $new_json ),
+        ], 200 );
+    }
+
+    rmai_write_elementor_data( $post->ID, $new_json );
+
+    // Verificación de integridad: nodos finales = previos + nuevos.
+    $stored     = (string) get_post_meta( $post->ID, '_elementor_data', true );
+    $decoded    = json_decode( $stored, true );
+    $nodes_now  = is_array( $decoded ) ? rmai_count_eltype_nodes( $decoded ) : -1;
+    if ( $nodes_now !== $nodes_before + $nodes_section ) {
+        rmai_write_elementor_data( $post->ID, $raw ); // revertir
+        rmai_power_audit( 'POST /post/' . $post->ID . '/elementor-section', 'revertido (nodos ' . $nodes_now . ' != ' . ( $nodes_before + $nodes_section ) . ')', 500 );
+        return new WP_Error( 'rmai_section_roundtrip_failed', 'El árbol resultante no cuadra; se revirtió al estado anterior.', [ 'status' => 500 ] );
+    }
+
+    rmai_clear_elementor_post_css( $post->ID );
+    rmai_power_audit( 'POST /post/' . $post->ID . '/elementor-section', 'insertada en ' . $pos_label . ' (+' . $nodes_section . ' nodos)', 200 );
+
+    return new WP_REST_Response( [
+        'success'     => true,
+        'post_id'     => $post->ID,
+        'position'    => $pos_label,
+        'nodes_total' => $nodes_now,
+        'note'        => 'CSS del post invalidado. Si añadiste estilos globales regenera el CSS de Elementor.',
+    ], 200 );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19.5 SUBIDA DE MEDIOS (solo medios; nada de plugins/temas/ZIP ejecutable)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /media/upload
+ *
+ * Sube un medio a la biblioteca vía media_handle_sideload. Acepta:
+ *   { url: "https://..." }                       → descarga remota
+ *   { base64: "...", filename: "foto.jpg" }       → datos en línea
+ * Opcionales: { alt, title, post_id } (post_id adjunta el medio a ese post).
+ * Devuelve el ID y los datos del adjunto.
+ */
+function rmai_media_upload( WP_REST_Request $request ) {
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    require_once ABSPATH . 'wp-admin/includes/media.php';
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+
+    $body     = $request->get_json_params();
+    $tmp       = null;
+    $filename  = '';
+    $cleanup   = null;
+
+    if ( ! empty( $body['url'] ) ) {
+        $url      = esc_url_raw( $body['url'] );
+        $filename = basename( sanitize_file_name( wp_parse_url( $url, PHP_URL_PATH ) ?: '' ) );
+        $tmp      = download_url( $url, 60 );
+        if ( is_wp_error( $tmp ) ) {
+            return new WP_Error( 'rmai_download_failed', $tmp->get_error_message(), [ 'status' => 400 ] );
+        }
+        $cleanup = $tmp;
+    } elseif ( ! empty( $body['base64'] ) ) {
+        $filename = sanitize_file_name( $body['filename'] ?? '' );
+        if ( '' === $filename ) {
+            return new WP_Error( 'rmai_missing', 'Con base64 hay que incluir {filename}.', [ 'status' => 400 ] );
+        }
+        $raw = base64_decode( (string) $body['base64'], true );
+        if ( false === $raw ) {
+            return new WP_Error( 'rmai_bad_base64', 'base64 no válido.', [ 'status' => 400 ] );
+        }
+        $tmp = wp_tempnam( $filename );
+        if ( ! $tmp ) {
+            return new WP_Error( 'rmai_tmp_failed', 'No se pudo crear el fichero temporal.', [ 'status' => 500 ] );
+        }
+        file_put_contents( $tmp, $raw );
+        $cleanup = $tmp;
+    } else {
+        return new WP_Error( 'rmai_missing', 'Incluye {url} o {base64, filename}.', [ 'status' => 400 ] );
+    }
+
+    if ( '' === $filename ) {
+        $filename = 'upload-' . time();
+    }
+
+    // Validación de tipo: solo MIME permitidos por WordPress para subidas.
+    $check = wp_check_filetype( $filename );
+    if ( empty( $check['type'] ) ) {
+        if ( $cleanup && file_exists( $cleanup ) ) {
+            @unlink( $cleanup );
+        }
+        return new WP_Error( 'rmai_bad_type', 'Tipo de fichero no permitido: ' . $filename, [ 'status' => 400 ] );
+    }
+
+    $file_array = [ 'name' => $filename, 'tmp_name' => $tmp ];
+    $parent_id  = isset( $body['post_id'] ) ? (int) $body['post_id'] : 0;
+    $att_id     = media_handle_sideload( $file_array, $parent_id );
+
+    if ( is_wp_error( $att_id ) ) {
+        if ( $cleanup && file_exists( $cleanup ) ) {
+            @unlink( $cleanup );
+        }
+        rmai_power_audit( 'POST /media/upload', 'error: ' . $att_id->get_error_message(), 500 );
+        return new WP_Error( 'rmai_sideload_failed', $att_id->get_error_message(), [ 'status' => 500 ] );
+    }
+
+    if ( ! empty( $body['alt'] ) ) {
+        update_post_meta( $att_id, '_wp_attachment_image_alt', sanitize_text_field( $body['alt'] ) );
+    }
+    if ( ! empty( $body['title'] ) ) {
+        wp_update_post( [ 'ID' => $att_id, 'post_title' => sanitize_text_field( $body['title'] ) ] );
+    }
+
+    rmai_power_audit( 'POST /media/upload', 'attachment #' . $att_id . ' (' . $filename . ')', 201 );
+    return new WP_REST_Response( [ 'success' => true ] + rmai_media_item( (int) $att_id ), 201 );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19.6 FICHEROS — SOLO LECTURA (listar, árbol, buscar, leer)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Resuelve una ruta de entrada a una ruta absoluta real DENTRO de ABSPATH.
+ * Devuelve null si está fuera o no existe. La entrada puede ser relativa a
+ * ABSPATH o absoluta (pero siempre tiene que resolver dentro de ABSPATH).
+ */
+function rmai_files_resolve( string $input ) {
+    $base = realpath( ABSPATH );
+    if ( false === $base ) {
+        return null;
+    }
+    $input = trim( $input );
+    if ( '' === $input || '.' === $input || '/' === $input ) {
+        return $base;
+    }
+    $candidate = ( '/' === $input[0] ) ? $input : $base . DIRECTORY_SEPARATOR . ltrim( $input, '/' );
+    $real      = realpath( $candidate );
+    if ( false === $real ) {
+        return null;
+    }
+    if ( $real !== $base && 0 !== strpos( $real, $base . DIRECTORY_SEPARATOR ) ) {
+        return null;
+    }
+    return $real;
+}
+
+/** Convierte una ruta absoluta a relativa respecto a ABSPATH (para respuestas). */
+function rmai_files_relpath( string $abs ): string {
+    $base = realpath( ABSPATH );
+    if ( false !== $base && 0 === strpos( $abs, $base ) ) {
+        return ltrim( substr( $abs, strlen( $base ) ), DIRECTORY_SEPARATOR );
+    }
+    return $abs;
+}
+
+/** Describe una entrada del sistema de ficheros. */
+function rmai_files_entry( string $abs ): array {
+    $is_dir = is_dir( $abs );
+    return [
+        'name'     => basename( $abs ),
+        'path'     => rmai_files_relpath( $abs ),
+        'type'     => $is_dir ? 'dir' : 'file',
+        'size'     => $is_dir ? null : ( @filesize( $abs ) ?: 0 ),
+        'modified' => @gmdate( 'Y-m-d H:i:s', (int) @filemtime( $abs ) ),
+    ];
+}
+
+/** GET /files/list?path= — lista el contenido de un directorio. */
+function rmai_files_list( WP_REST_Request $request ) {
+    $dir = rmai_files_resolve( (string) $request->get_param( 'path' ) );
+    if ( null === $dir ) {
+        return new WP_Error( 'rmai_path_denied', 'Ruta fuera de ABSPATH o inexistente.', [ 'status' => 400 ] );
+    }
+    if ( ! is_dir( $dir ) ) {
+        return new WP_Error( 'rmai_not_dir', 'La ruta no es un directorio.', [ 'status' => 400 ] );
+    }
+    $entries = [];
+    foreach ( scandir( $dir ) as $name ) {
+        if ( '.' === $name || '..' === $name ) {
+            continue;
+        }
+        $entries[] = rmai_files_entry( $dir . DIRECTORY_SEPARATOR . $name );
+    }
+    rmai_power_audit( 'GET /files/list', rmai_files_relpath( $dir ), 200 );
+    return new WP_REST_Response( [
+        'path'    => rmai_files_relpath( $dir ),
+        'total'   => count( $entries ),
+        'entries' => $entries,
+    ], 200 );
+}
+
+/** Construcción recursiva del árbol con tope de profundidad y de nodos. */
+function rmai_files_build_tree( string $dir, int $depth, int &$budget ): array {
+    $out = [];
+    if ( $depth < 0 || $budget <= 0 ) {
+        return $out;
+    }
+    $names = @scandir( $dir );
+    if ( false === $names ) {
+        return $out;
+    }
+    foreach ( $names as $name ) {
+        if ( '.' === $name || '..' === $name ) {
+            continue;
+        }
+        if ( $budget-- <= 0 ) {
+            break;
+        }
+        $abs   = $dir . DIRECTORY_SEPARATOR . $name;
+        $entry = rmai_files_entry( $abs );
+        if ( 'dir' === $entry['type'] && $depth > 0 ) {
+            $entry['children'] = rmai_files_build_tree( $abs, $depth - 1, $budget );
+        }
+        $out[] = $entry;
+    }
+    return $out;
+}
+
+/** GET /files/tree?path=&depth= — árbol recursivo con profundidad limitada. */
+function rmai_files_tree( WP_REST_Request $request ) {
+    $dir = rmai_files_resolve( (string) $request->get_param( 'path' ) );
+    if ( null === $dir ) {
+        return new WP_Error( 'rmai_path_denied', 'Ruta fuera de ABSPATH o inexistente.', [ 'status' => 400 ] );
+    }
+    if ( ! is_dir( $dir ) ) {
+        return new WP_Error( 'rmai_not_dir', 'La ruta no es un directorio.', [ 'status' => 400 ] );
+    }
+    $depth  = max( 0, min( 6, (int) $request->get_param( 'depth' ) ?: 2 ) );
+    $budget = RMAI_FILES_NODE_MAX;
+    $tree   = rmai_files_build_tree( $dir, $depth, $budget );
+    rmai_power_audit( 'GET /files/tree', rmai_files_relpath( $dir ) . ' depth=' . $depth, 200 );
+    return new WP_REST_Response( [
+        'path'      => rmai_files_relpath( $dir ),
+        'depth'     => $depth,
+        'truncated' => ( $budget <= 0 ),
+        'tree'      => $tree,
+    ], 200 );
+}
+
+/** GET /files/read?path= — lee un fichero de texto (con tope de tamaño). */
+function rmai_files_read( WP_REST_Request $request ) {
+    $file = rmai_files_resolve( (string) $request->get_param( 'path' ) );
+    if ( null === $file ) {
+        return new WP_Error( 'rmai_path_denied', 'Ruta fuera de ABSPATH o inexistente.', [ 'status' => 400 ] );
+    }
+    if ( ! is_file( $file ) ) {
+        return new WP_Error( 'rmai_not_file', 'La ruta no es un fichero.', [ 'status' => 400 ] );
+    }
+    $size = (int) filesize( $file );
+    if ( $size > RMAI_FILES_READ_MAX ) {
+        return new WP_Error( 'rmai_too_large', 'El fichero supera el tope de lectura (' . RMAI_FILES_READ_MAX . ' bytes).', [ 'status' => 413 ] );
+    }
+    $content = file_get_contents( $file );
+    if ( false === $content ) {
+        return new WP_Error( 'rmai_read_failed', 'No se pudo leer el fichero.', [ 'status' => 500 ] );
+    }
+    $is_binary = ( '' !== $content && false !== strpos( $content, "\0" ) );
+    rmai_power_audit( 'GET /files/read', rmai_files_relpath( $file ), 200 );
+    return new WP_REST_Response( [
+        'path'    => rmai_files_relpath( $file ),
+        'size'    => $size,
+        'binary'  => $is_binary,
+        'content' => $is_binary ? null : $content,
+    ], 200 );
+}
+
+/**
+ * GET /files/search?path=&name=&contains= — busca ficheros por nombre (subcadena
+ * sobre el nombre) y/o por contenido (subcadena). Recorre recursivamente bajo
+ * path con tope de nodos; para contenido solo abre ficheros < RMAI_FILES_SCAN_MAX.
+ */
+function rmai_files_search( WP_REST_Request $request ) {
+    $root = rmai_files_resolve( (string) $request->get_param( 'path' ) );
+    if ( null === $root ) {
+        return new WP_Error( 'rmai_path_denied', 'Ruta fuera de ABSPATH o inexistente.', [ 'status' => 400 ] );
+    }
+    if ( ! is_dir( $root ) ) {
+        return new WP_Error( 'rmai_not_dir', 'La ruta base no es un directorio.', [ 'status' => 400 ] );
+    }
+    $name     = (string) $request->get_param( 'name' );
+    $contains = (string) $request->get_param( 'contains' );
+    if ( '' === $name && '' === $contains ) {
+        return new WP_Error( 'rmai_missing', 'Incluye al menos "name" o "contains".', [ 'status' => 400 ] );
+    }
+
+    $results = [];
+    $budget  = RMAI_FILES_NODE_MAX;
+    try {
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ),
+            RecursiveIteratorIterator::LEAVES_ONLY
+        );
+        foreach ( $it as $fileinfo ) {
+            if ( $budget-- <= 0 ) {
+                break;
+            }
+            if ( ! $fileinfo->isFile() ) {
+                continue;
+            }
+            $abs   = $fileinfo->getPathname();
+            $fname = $fileinfo->getFilename();
+            $match_name    = ( '' === $name ) || ( false !== stripos( $fname, $name ) );
+            $match_content = ( '' === $contains );
+            $line          = null;
+            if ( '' !== $contains && $fileinfo->getSize() <= RMAI_FILES_SCAN_MAX ) {
+                $data = @file_get_contents( $abs );
+                if ( false !== $data && false === strpos( $data, "\0" ) && false !== stripos( $data, $contains ) ) {
+                    $match_content = true;
+                    $pos           = stripos( $data, $contains );
+                    $start         = max( 0, $pos - 40 );
+                    $line          = trim( substr( $data, $start, 120 ) );
+                }
+            } elseif ( '' !== $contains ) {
+                $match_content = false; // demasiado grande para escanear
+            }
+            if ( $match_name && $match_content ) {
+                $entry = rmai_files_entry( $abs );
+                if ( null !== $line ) {
+                    $entry['snippet'] = $line;
+                }
+                $results[] = $entry;
+            }
+        }
+    } catch ( \Throwable $e ) {
+        return new WP_Error( 'rmai_search_failed', $e->getMessage(), [ 'status' => 500 ] );
+    }
+
+    rmai_power_audit( 'GET /files/search', rmai_files_relpath( $root ) . ' name="' . $name . '" contains="' . $contains . '"', 200 );
+    return new WP_REST_Response( [
+        'path'      => rmai_files_relpath( $root ),
+        'total'     => count( $results ),
+        'truncated' => ( $budget <= 0 ),
+        'results'   => $results,
+    ], 200 );
 }
 
 // ═══════════════════════════════════════════════════════

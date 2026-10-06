@@ -1,7 +1,7 @@
 # AHM Connect — Requisitos y documentación completa
 
 **Plugin:** AHM Connect  
-**Versión:** 3.7.2  
+**Versión:** 3.8.0-beta  
 **Namespace REST:** `ahm-connect/v1`  
 **Autenticación:** cabecera `X-RMAI-Key`  
 **Autor:** Aquí Hay Marketing · aquihaymarketing.es
@@ -33,9 +33,22 @@ API REST privada para gestionar desde herramientas externas (n8n, Make, scripts 
 - Conexión opcional con el panel AHM-Sites, activable/desactivable
 
 **Qué no puede hacer:**
-- Modificar el contenido de páginas Elementor (protegido por diseño)
+- Modificar el contenido de páginas Elementor vía `post_content` (protegido por diseño; usa `/post/{id}/meta` o `/post/{id}/elementor-section`)
 - Acceder sin API Key válida
 - Saltarse el rate limit por IP
+
+### Power Tools (v3.8.0-beta)
+
+Bloque **no-RCE** que amplía lo que la IA puede hacer sin introducir ejecución de código arbitrario. Todo va con la misma API Key diaria, mismo rate limit y mismo log (las escrituras dejan traza de auditoría con el recurso afectado). **Deliberadamente NO se incluye** ejecutar PHP, escribir/editar/borrar ficheros, WP-CLI, instalar plugins/temas ni enlaces de login admin: con una key única autoactualizada en toda la flota, cualquiera de esas capacidades sería RCE en todas las webs.
+
+| Grupo | Endpoints |
+|-------|-----------|
+| **Gutenberg** | `GET /gutenberg/blocks`, `POST /gutenberg/validate` (dry-run), `POST /gutenberg/post`, `PUT /gutenberg/post/{id}` — crea/edita posts con bloques validados con `parse_blocks`/`serialize_blocks`, sin `kses` que rompa atributos de bloques de terceros |
+| **Skills** | `GET/POST /skills`, `GET/PUT/DELETE /skills/{id}` — playbooks Markdown en un CPT privado (`ahm_skill`); el listado devuelve nombre + descripción para que la IA elija; incluye una skill integrada "Cómo escribir skills" |
+| **Design** | `GET/PUT/DELETE /design` — dirección de diseño global (paleta, tipografías, espaciados, tono, reglas). `GET/POST /design/elementor-kit` — colores/tipografías globales y CSS del **Kit clásico** de Elementor. `POST /design/elementor-regenerate-css` — regenera el CSS global |
+| **Elementor clásico** | `POST /post/{id}/elementor-section` — inserta secciones (hero, features, pricing, FAQ…) en una posición dada, reutilizando la escritura segura con verificación de nodos y reversión; limpia el CSS del post |
+| **Medios** | `POST /media/upload` — sube un medio por URL o base64 con `media_handle_sideload` (solo medios; nada de plugins/temas ni ZIP ejecutable) |
+| **Ficheros (SOLO LECTURA)** | `GET /files/list`, `GET /files/tree`, `GET /files/read`, `GET /files/search` — explorar y leer bajo `ABSPATH` (rutas resueltas con `realpath()`); sin escribir, borrar ni pausar |
 
 ---
 
@@ -107,4 +120,4 @@ Si necesitas esa referencia, pídela al equipo de Aquí Hay Marketing.
 
 ---
 
-*Última actualización: octubre 2026 · v3.7.2*
+*Última actualización: octubre 2026 · v3.8.0-beta*

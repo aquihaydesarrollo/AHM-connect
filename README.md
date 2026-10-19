@@ -120,14 +120,15 @@ define( 'RMAI_DISABLE_UPDATES', true );
 
 ## 4. Panel de administración
 
-Acceso: **WordPress Admin → Ajustes → AHM Connect**
+Acceso: **WordPress Admin → Ajustes → AHM Connect**. Panel rediseñado en la 3.8.0 (estilo minimal, iconos de línea, sin emojis), organizado en pestañas:
 
-- **API Key:** clave actual, botón para regenerar
-- **Info del sitio:** versiones de WordPress, PHP, Rank Math, WooCommerce
-- **Ajustes:** rate limit on/off y peticiones por minuto, log de accesos on/off, whitelist de IPs, grupos Power Tools y Ficheros
-- **Endpoints:** tabla de referencia de todas las rutas disponibles
-- **Log de peticiones:** últimas 100 peticiones, con opción de borrar
-- **AHM Sites:** toggle para vincular el sitio al panel AHM-Sites por código de un solo uso (opcional, independiente de la API Key general)
+- **Resumen:** clave del día (mostrar/ocultar, copiar, regenerar) y URL base; AHM Sites (activar/desactivar, código de emparejamiento de un solo uso); datos del sitio; y **Acceso y límites**: grupos Power Tools y Ficheros, log on/off, límite de peticiones (on/off y peticiones por minuto) y whitelist de IPs.
+- **SEO / GEO:** scores de Rank Math, GEO score, checks, llms.txt, bots IA, schema, E-E-A-T y recomendaciones (solo se calcula al abrir la pestaña).
+- **Endpoints:** referencia de todas las rutas; los grupos desactivados salen marcados.
+- **Log:** últimas 100 peticiones, con opción de borrar.
+- **Documentación:** cómo conectar, códigos de respuesta, constantes y filtros.
+
+En la barra superior queda el interruptor rápido de la API (al cambiarlo se rota la clave).
 
 ---
 

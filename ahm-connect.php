@@ -296,7 +296,7 @@ function rmai_handle_admin_actions(): void {
         current_user_can( 'manage_options' )
     ) {
         delete_option( RMAI_LOG_OPTION );
-        wp_safe_redirect( admin_url( 'options-general.php?page=ahm-connect&rmai_msg=log_cleared' ) );
+        wp_safe_redirect( admin_url( 'options-general.php?page=ahm-connect&tab=log&rmai_msg=log_cleared' ) );
         exit;
     }
 
@@ -321,635 +321,576 @@ function rmai_handle_admin_actions(): void {
     }
 }
 
+/**
+ * Iconos SVG de línea (lucide, licencia ISC) para el panel. Sin emojis.
+ */
+function rmai_admin_icon( string $name, int $size = 16 ): string {
+    $p = [
+        'plug'     => '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
+        'key'      => '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
+        'copy'     => '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+        'eye'      => '<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/>',
+        'refresh'  => '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+        'power'    => '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
+        'link'     => '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+        'globe'    => '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+        'shield'   => '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+        'zap'      => '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+        'folder'   => '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+        'gauge'    => '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+        'list'     => '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
+        'code'     => '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+        'book'     => '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/>',
+        'chart'    => '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+        'home'     => '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+        'check'    => '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+        'x'        => '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+        'alert'    => '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+        'info'     => '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+        'trash'    => '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+        'external' => '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+        'server'   => '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>',
+        'file'     => '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+        'users'    => '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+        'bulb'     => '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+    ];
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' . (int) $size . '" height="' . (int) $size . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' . ( $p[ $name ] ?? '' ) . '</svg>';
+}
+
+/** URL de una pestaña del panel. */
+function rmai_admin_tab_url( string $tab ): string {
+    return admin_url( 'options-general.php?page=ahm-connect' . ( 'resumen' === $tab ? '' : '&tab=' . rawurlencode( $tab ) ) );
+}
+
+/** Fila con interruptor accesible (checkbox real con role="switch"). */
+function rmai_admin_switch_row( string $name, bool $checked, string $label, string $desc, string $icon = '' ): void {
+    $id = 'ahmc-' . sanitize_key( $name );
+    ?>
+    <div class="ahmc-row">
+        <?php if ( $icon ) : ?><span class="ahmc-row-ic"><?php echo rmai_admin_icon( $icon, 16 ); ?></span><?php endif; ?>
+        <div class="ahmc-grow">
+            <label class="ahmc-row-t" for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $label ); ?></label>
+            <div class="ahmc-mu" id="<?php echo esc_attr( $id ); ?>-d"><?php echo wp_kses( $desc, [ 'strong' => [], 'code' => [] ] ); ?></div>
+        </div>
+        <span class="ahmc-switch">
+            <input type="checkbox" role="switch" id="<?php echo esc_attr( $id ); ?>" name="<?php echo esc_attr( $name ); ?>" aria-describedby="<?php echo esc_attr( $id ); ?>-d" <?php checked( $checked ); ?>>
+            <span class="ahmc-track" aria-hidden="true"></span>
+        </span>
+    </div>
+    <?php
+}
+
 function rmai_settings_page(): void {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        return;
+    }
+
     $api_key     = get_option( RMAI_OPTION_API_KEY, '' );
     $settings    = wp_parse_args( get_option( RMAI_OPTION_SETTINGS, [] ), rmai_default_settings() );
     $base_url    = rest_url( RMAI_NAMESPACE );
-    $msg         = $_GET['rmai_msg'] ?? '';
+    $msg         = isset( $_GET['rmai_msg'] ) ? sanitize_key( wp_unslash( $_GET['rmai_msg'] ) ) : '';
     $api_enabled = (bool) get_option( RMAI_OPTION_ENABLED, 1 );
-    $log         = get_option( RMAI_LOG_OPTION, [] );
+    $log         = (array) get_option( RMAI_LOG_OPTION, [] );
     $rm_ver      = defined( 'RANK_MATH_VERSION' ) ? RANK_MATH_VERSION : null;
     $wc_ver      = defined( 'WC_VERSION' ) ? WC_VERSION : null;
+    $el_ver      = defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null;
     $toggle_url  = wp_nonce_url( admin_url( 'admin-post.php?action=rmai_toggle_api' ), 'rmai_toggle_api' );
     $log_count   = count( $log );
+    $groups      = rmai_route_groups();
     $notices     = [
-        'key_regenerated'        => [ 'success', 'API Key regenerada. Actualiza la clave en tus herramientas.' ],
-        'log_cleared'            => [ 'success', 'Log de peticiones eliminado.' ],
-        'settings_saved'         => [ 'success', 'Ajustes guardados correctamente.' ],
-        'ahm_sites_disabled'     => [ 'success', 'Conexión con AHM Sites desactivada.' ],
+        'key_regenerated'    => 'API Key regenerada. Actualiza la clave en tus herramientas.',
+        'log_cleared'        => 'Log de peticiones eliminado.',
+        'settings_saved'     => 'Ajustes guardados correctamente.',
+        'ahm_sites_disabled' => 'Conexión con AHM Sites desactivada.',
     ];
 
+    $tabs = [
+        'resumen'   => [ 'home', 'Resumen' ],
+        'seo'       => [ 'chart', 'SEO / GEO' ],
+        'endpoints' => [ 'code', 'Endpoints' ],
+        'log'       => [ 'list', 'Log' ],
+        'docs'      => [ 'book', 'Documentación' ],
+    ];
+    $tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'resumen';
+    if ( ! isset( $tabs[ $tab ] ) ) {
+        $tab = 'resumen';
+    }
+
     // ── AHM Sites: estado de la conexión con el panel ──────────────────────
-    $ahm_sites_enabled   = (bool) get_option( RMAI_OPTION_AHM_SITES_ENABLED, false );
-    $ahm_sites_site_id   = (int) get_option( RMAI_OPTION_AHM_SITES_SITE_ID, 0 );
-    $ahm_sites_panel_url = (string) get_option( RMAI_OPTION_AHM_SITES_PANEL_URL, '' );
-    $ahm_sites_connected = $ahm_sites_enabled && $ahm_sites_site_id && get_option( RMAI_OPTION_AHM_SITES_SECRET, '' );
+    $ahm_sites_enabled    = (bool) get_option( RMAI_OPTION_AHM_SITES_ENABLED, false );
+    $ahm_sites_site_id    = (int) get_option( RMAI_OPTION_AHM_SITES_SITE_ID, 0 );
+    $ahm_sites_panel_url  = (string) get_option( RMAI_OPTION_AHM_SITES_PANEL_URL, '' );
+    $ahm_sites_connected  = $ahm_sites_enabled && $ahm_sites_site_id && get_option( RMAI_OPTION_AHM_SITES_SECRET, '' );
     $ahm_sites_toggle_url = wp_nonce_url( admin_url( 'admin-post.php?action=rmai_toggle_ahm_sites' ), 'rmai_toggle_ahm_sites' );
 
     // El código de emparejamiento en claro solo existe en un transient de un solo uso
     // (60s, puente entre el redirect POST->GET tras generarlo). Al leerlo aquí se borra:
     // si se recarga la página ya no está disponible en ningún sitio (solo queda su hash).
     $ahm_sites_new_code = null;
-    if ( $msg === 'ahm_sites_code_generated' ) {
+    if ( 'ahm_sites_code_generated' === $msg ) {
         $display_key        = 'rmai_ahm_sites_code_display_' . get_current_user_id();
         $ahm_sites_new_code = get_transient( $display_key );
         delete_transient( $display_key );
     }
     ?>
     <style>
-    #ahm-wrap *{box-sizing:border-box}
-    #ahm-wrap{max-width:1100px;margin:20px 20px 40px 0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-
-    /* Header */
-    .ahm-header{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%);border-radius:12px;padding:28px 32px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-    .ahm-header-left{display:flex;align-items:center;gap:16px}
-    .ahm-logo{width:44px;height:44px;background:#3b82f6;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
-    .ahm-logo .dashicons{color:#fff;font-size:24px;width:24px;height:24px}
-    .ahm-header h1{color:#fff;font-size:22px;font-weight:700;margin:0;padding:0}
-    .ahm-header h1 span{color:#93c5fd;font-size:13px;font-weight:400;margin-left:8px}
-    .ahm-header p{color:#94a3b8;font-size:13px;margin:3px 0 0}
-    .ahm-badge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#e2e8f0;font-size:11px;padding:3px 10px;border-radius:20px}
-
-    /* Status bar */
-    .ahm-status{border-radius:10px;padding:14px 20px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-    .ahm-status.on{background:#f0fdf4;border:1.5px solid #86efac}
-    .ahm-status.off{background:#fef2f2;border:1.5px solid #fca5a5}
-    .ahm-status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-    .ahm-status.on .ahm-status-dot{background:#22c55e;box-shadow:0 0 0 3px #bbf7d0}
-    .ahm-status.off .ahm-status-dot{background:#ef4444;box-shadow:0 0 0 3px #fecaca}
-    .ahm-status-text{font-size:14px;font-weight:600}
-    .ahm-status.on .ahm-status-text{color:#15803d}
-    .ahm-status.off .ahm-status-text{color:#b91c1c}
-    .ahm-status-sub{font-size:12px;color:#64748b;margin-top:1px}
-
-    /* Notice */
-    .ahm-notice{border-radius:8px;padding:12px 16px;margin-bottom:20px;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:500}
-    .ahm-notice.success{background:#f0fdf4;border:1px solid #86efac;color:#166534}
-
-    /* Grid */
-    .ahm-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
-    .ahm-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px}
-
-    /* Card */
-    .ahm-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden}
-    .ahm-card-header{padding:16px 20px 12px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px}
-    .ahm-card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
-    .ahm-card-icon .dashicons{font-size:17px;width:17px;height:17px}
-    .ahm-card-icon.blue .dashicons{color:#3b82f6}
-    .ahm-card-icon.green .dashicons{color:#22c55e}
-    .ahm-card-icon.purple .dashicons{color:#a855f7}
-    .ahm-card-icon.orange .dashicons{color:#f97316}
-    .ahm-card-icon.slate .dashicons{color:#64748b}
-    .ahm-card-icon.blue{background:#eff6ff}
-    .ahm-card-icon.green{background:#f0fdf4}
-    .ahm-card-icon.purple{background:#faf5ff}
-    .ahm-card-icon.orange{background:#fff7ed}
-    .ahm-card-icon.slate{background:#f8fafc}
-    .ahm-card-title{font-size:13px;font-weight:600;color:#0f172a;margin:0}
-    .ahm-card-body{padding:18px 20px}
-
-    /* API Key */
-    .ahm-key-wrap{position:relative;margin-bottom:12px}
-    .ahm-key-input{width:100%;padding:10px 44px 10px 12px;font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;color:#334155;cursor:pointer;transition:.15s}
-    .ahm-key-input:focus{outline:none;border-color:#3b82f6;background:#fff}
-    .ahm-copy-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#64748b;padding:4px;font-size:14px;transition:.15s}
-    .ahm-copy-btn .dashicons{font-size:15px;width:15px;height:15px;vertical-align:middle}
-    .ahm-copy-btn:hover{color:#3b82f6}
-
-    /* Buttons */
-    .ahm-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;text-decoration:none;transition:.15s;line-height:1}
-    .ahm-btn:hover{text-decoration:none}
-    .ahm-btn-primary{background:#3b82f6;color:#fff}
-    .ahm-btn-primary:hover{background:#2563eb;color:#fff}
-    .ahm-btn-danger{background:#ef4444;color:#fff}
-    .ahm-btn-danger:hover{background:#dc2626;color:#fff}
-    .ahm-btn-success{background:#22c55e;color:#fff}
-    .ahm-btn-success:hover{background:#16a34a;color:#fff}
-    .ahm-btn-ghost{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
-    .ahm-btn-ghost:hover{background:#e2e8f0;color:#334155}
-    .ahm-btn-sm{padding:5px 12px;font-size:12px}
-    .ahm-btn .dashicons{font-size:15px;width:15px;height:15px;line-height:1}
-
-    /* Stats */
-    .ahm-stat{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;text-align:center}
-    .ahm-stat-val{font-size:26px;font-weight:700;color:#0f172a;line-height:1}
-    .ahm-stat-label{font-size:11px;color:#64748b;margin-top:4px;text-transform:uppercase;letter-spacing:.05em}
-
-    /* Info table */
-    .ahm-info-table{width:100%;border-collapse:collapse;font-size:13px}
-    .ahm-info-table tr:not(:last-child) td{border-bottom:1px solid #f1f5f9}
-    .ahm-info-table td{padding:8px 0}
-    .ahm-info-table td:first-child{color:#64748b;width:110px;font-weight:500}
-    .ahm-info-table td:last-child{color:#0f172a;font-weight:500}
-    .ahm-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
-    .ahm-pill-green{background:#dcfce7;color:#166534}
-    .ahm-pill-blue{background:#dbeafe;color:#1d4ed8}
-    .ahm-pill-gray{background:#f1f5f9;color:#475569}
-
-    /* Settings toggles */
-    .ahm-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0}
-    .ahm-toggle-row:not(:last-of-type){border-bottom:1px solid #f1f5f9}
-    .ahm-toggle-label{font-size:13px;font-weight:500;color:#334155}
-    .ahm-toggle-desc{font-size:11px;color:#94a3b8;margin-top:2px}
-    .ahm-switch{position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0}
-    .ahm-switch input{opacity:0;width:0;height:0}
-    .ahm-slider{position:absolute;inset:0;background:#e2e8f0;border-radius:20px;cursor:pointer;transition:.2s}
-    .ahm-slider:before{content:"";position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
-    .ahm-switch input:checked + .ahm-slider{background:#3b82f6}
-    .ahm-switch input:checked + .ahm-slider:before{transform:translateX(16px)}
-    .ahm-input{width:100%;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#334155;background:#f8fafc;transition:.15s;margin-top:8px}
-    .ahm-input:focus{outline:none;border-color:#3b82f6;background:#fff}
-
-    /* Endpoints */
-    .ahm-ep-section{margin-bottom:4px}
-    .ahm-ep-group{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:6px 0 4px;color:#94a3b8}
-    .ahm-ep-group .dashicons{font-size:13px;width:13px;height:13px;vertical-align:-2px;margin-right:2px}
-    .ahm-ep-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f8fafc;font-size:12px}
-    .ahm-ep-row:last-child{border-bottom:none}
-    .ahm-method{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:700;font-family:monospace;flex-shrink:0;min-width:40px;text-align:center}
-    .ahm-method.get{background:#dcfce7;color:#166534}
-    .ahm-method.post{background:#dbeafe;color:#1d4ed8}
-    .ahm-method.put{background:#fef9c3;color:#854d0e}
-    .ahm-method.delete{background:#fee2e2;color:#b91c1c}
-    .ahm-method.mixed{background:#f3e8ff;color:#7e22ce}
-    .ahm-ep-path{font-family:monospace;color:#334155;flex-shrink:0;min-width:220px}
-    .ahm-ep-desc{color:#64748b}
-
-    /* Log */
-    .ahm-log-table{width:100%;border-collapse:collapse;font-size:12px}
-    .ahm-log-table th{text-align:left;padding:8px 12px;background:#f8fafc;color:#64748b;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e2e8f0}
-    .ahm-log-table td{padding:8px 12px;border-bottom:1px solid #f8fafc;color:#334155}
-    .ahm-log-table tr:hover td{background:#fafafa}
-    .ahm-status-code{padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600}
-    .ahm-status-code.ok{background:#dcfce7;color:#166534}
-    .ahm-status-code.err{background:#fee2e2;color:#b91c1c}
-    .ahm-status-code.warn{background:#fef9c3;color:#854d0e}
-
-    /* Tabs */
-    .ahm-tabs{display:flex;gap:4px;border-bottom:2px solid #e2e8f0;margin-bottom:20px}
-    .ahm-tab{padding:8px 16px;font-size:13px;font-weight:500;color:#64748b;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;background:none;border-top:none;border-left:none;border-right:none;transition:.15s}
-    .ahm-tab:hover{color:#334155}
-    .ahm-tab.active{color:#3b82f6;border-bottom-color:#3b82f6}
-    .ahm-tab .dashicons{font-size:15px;width:15px;height:15px;line-height:1;vertical-align:-2px;margin-right:2px}
-    .ahm-tab-content{display:none}
-    .ahm-tab-content.active{display:block}
+    .ahmc{--b:#e4e4e7;--b2:#f4f4f5;--fg:#09090b;--fg2:#3f3f46;--mu:#71717a;--bg:#fff;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--ring:#2563eb;
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;color:var(--fg);max-width:1180px;margin:24px 20px 48px 2px;font-size:13px;line-height:1.5}
+    .ahmc *{box-sizing:border-box}
+    .ahmc svg{display:inline-block;vertical-align:-3px;flex-shrink:0}
+    .ahmc a{color:var(--fg)}
+    .ahmc code,.ahmc .ahmc-mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+    .ahmc code{background:var(--b2);border-radius:6px;padding:2px 6px;color:var(--fg2)}
+    .ahmc :focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:6px}
+    .ahmc .screen-reader-text{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(1px,1px,1px,1px)}
+    /* Cabecera */
+    .ahmc-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+    .ahmc-top h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0;padding:0;display:flex;align-items:center;gap:10px;line-height:1.2;color:var(--fg)}
+    .ahmc-logo{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:var(--fg);color:#fff}
+    .ahmc-sp{flex:1}
+    .ahmc-badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--b);border-radius:999px;padding:3px 10px;font-size:12px;font-weight:500;background:var(--bg);color:var(--fg);white-space:nowrap}
+    .ahmc-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;background:#a1a1aa}
+    .ahmc-dot.ok{background:var(--ok)}.ahmc-dot.warn{background:var(--warn)}.ahmc-dot.bad{background:var(--bad)}
+    /* Botones */
+    .ahmc-btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:8px;border:1px solid var(--b);background:var(--bg);color:var(--fg);font-size:13px;font-weight:500;text-decoration:none;cursor:pointer;line-height:1;white-space:nowrap;font-family:inherit}
+    .ahmc-btn:hover{background:var(--b2);color:var(--fg)}
+    .ahmc-btn.pri{background:var(--fg);border-color:var(--fg);color:#fff}.ahmc-btn.pri:hover{background:#27272a;color:#fff}
+    .ahmc-btn.danger{color:#b91c1c}.ahmc-btn.danger:hover{background:#fef2f2;color:#991b1b}
+    .ahmc-btn.sm{height:30px;padding:0 10px;font-size:12.5px}
+    .ahmc-btn[disabled]{opacity:.55;cursor:not-allowed}
+    /* Pestañas */
+    .ahmc-seg{display:inline-flex;flex-wrap:wrap;background:var(--b2);border-radius:10px;padding:4px;gap:2px;margin-bottom:20px}
+    .ahmc-seg a{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:7px;font-size:13px;font-weight:500;color:var(--mu);text-decoration:none}
+    .ahmc-seg a:hover{color:var(--fg)}
+    .ahmc-seg a[aria-current="page"]{background:var(--bg);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+    .ahmc-seg .ahmc-n{font-size:11px;background:var(--bg);border:1px solid var(--b);border-radius:999px;padding:0 6px;color:var(--mu)}
+    /* Rejilla y tarjetas */
+    .ahmc-grid{display:grid;gap:16px}
+    .ahmc-g3{grid-template-columns:repeat(3,minmax(0,1fr))}.ahmc-g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+    @media(max-width:1180px){.ahmc-g3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:782px){.ahmc-g3,.ahmc-g2{grid-template-columns:1fr}.ahmc{margin-right:10px}}
+    .ahmc-card{background:var(--bg);border:1px solid var(--b);border-radius:12px;padding:18px 20px;box-shadow:0 1px 2px rgba(0,0,0,.03);min-width:0}
+    .ahmc-card h2{margin:0 0 4px;font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;color:var(--fg)}
+    .ahmc-card h3{margin:0 0 8px;font-size:12px;font-weight:500;color:var(--mu);text-transform:none}
+    .ahmc-mu{color:var(--mu);font-size:12.5px;line-height:1.5}
+    .ahmc-lead{color:var(--mu);font-size:12.5px;margin:0 0 14px}
+    .ahmc-big{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.15}
+    .ahmc-flex{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .ahmc-grow{flex:1;min-width:0}
+    .ahmc-sep{height:1px;background:var(--b2);margin:14px 0}
+    /* Avisos */
+    .ahmc-alert{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--b);border-radius:12px;padding:12px 14px;background:var(--bg);margin-bottom:16px;font-size:13px}
+    .ahmc-alert.good{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+    .ahmc-alert.warn{border-color:#fde68a;background:#fffbeb;color:#92400e}
+    .ahmc-alert.bad{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+    /* Campos */
+    .ahmc-field{display:flex;gap:8px;align-items:center}
+    .ahmc input[type=text],.ahmc input[type=number],.ahmc input[type=password]{border:1px solid var(--b);border-radius:8px;height:34px;padding:0 10px;font-size:13px;color:var(--fg);background:var(--bg);box-shadow:none;margin:0;min-width:0}
+    .ahmc input[type=text]:focus,.ahmc input[type=number]:focus,.ahmc input[type=password]:focus{border-color:var(--ring);box-shadow:0 0 0 1px var(--ring);outline:none}
+    .ahmc .ahmc-key{flex:1;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.02em}
+    .ahmc-label{display:block;font-size:13px;font-weight:500;color:var(--fg);margin:0 0 2px}
+    /* Filas con interruptor */
+    .ahmc-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--b2)}
+    .ahmc-row:last-child{border-bottom:0}
+    .ahmc-row-ic{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--b2);color:var(--fg2);flex-shrink:0}
+    .ahmc-row-t{display:block;font-size:13px;font-weight:500;color:var(--fg);cursor:pointer}
+    .ahmc-switch{position:relative;display:inline-block;width:38px;height:22px;flex-shrink:0}
+    .ahmc-switch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:1}
+    .ahmc-track{position:absolute;inset:0;background:#d4d4d8;border-radius:999px;transition:background .15s}
+    .ahmc-track:before{content:"";position:absolute;width:18px;height:18px;left:2px;top:2px;background:#fff;border-radius:50%;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s}
+    .ahmc-switch input:checked + .ahmc-track{background:var(--fg)}
+    .ahmc-switch input:checked + .ahmc-track:before{transform:translateX(16px)}
+    .ahmc-switch input:focus-visible + .ahmc-track{outline:2px solid var(--ring);outline-offset:2px}
+    /* Tablas y pastillas */
+    .ahmc-table{width:100%;border-collapse:collapse;font-size:12.5px}
+    .ahmc-table th{text-align:left;font-weight:500;color:var(--mu);padding:8px 10px;border-bottom:1px solid var(--b);white-space:nowrap}
+    .ahmc-table td{padding:8px 10px;border-bottom:1px solid var(--b2);vertical-align:middle}
+    .ahmc-table tr:last-child td{border-bottom:0}
+    .ahmc-scroll{overflow-x:auto}
+    .ahmc-pill{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:500;border-radius:6px;padding:2px 8px;background:var(--b2);color:var(--fg2);white-space:nowrap}
+    .ahmc-pill.ok{background:#dcfce7;color:#166534}.ahmc-pill.warn{background:#fef3c7;color:#92400e}.ahmc-pill.bad{background:#fee2e2;color:#991b1b}.ahmc-pill.info{background:#dbeafe;color:#1e40af}
+    .ahmc-m{display:inline-block;min-width:52px;text-align:center;font:600 10.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;border-radius:5px;padding:1px 6px;background:var(--b2);color:var(--fg2)}
+    .ahmc-m.get{background:#dcfce7;color:#166534}.ahmc-m.post{background:#dbeafe;color:#1e40af}.ahmc-m.put{background:#fef3c7;color:#92400e}.ahmc-m.delete{background:#fee2e2;color:#991b1b}
+    .ahmc-kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:12.5px}
+    .ahmc-kv dt{color:var(--mu)}.ahmc-kv dd{margin:0;color:var(--fg);text-align:right;min-width:0;overflow-wrap:anywhere}
+    .ahmc details{border:1px solid var(--b);border-radius:10px;background:var(--bg)}
+    .ahmc summary{cursor:pointer;padding:10px 14px;font-size:13px;font-weight:500;color:var(--fg2);list-style-position:inside}
+    .ahmc details > div{padding:0 14px 14px}
+    .ahmc pre{font-size:11.5px;background:#fafafa;border:1px solid var(--b);border-radius:8px;padding:10px;max-height:220px;overflow:auto;white-space:pre-wrap;margin:0}
+    .ahmc-ok-ic{color:var(--ok)}.ahmc-bad-ic{color:var(--bad)}.ahmc-warn-ic{color:var(--warn)}
+    .ahmc-check{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid var(--b);border-radius:8px}
+    .ahmc-bar{height:8px;border-radius:99px;overflow:hidden;display:flex;background:var(--b2)}
+    .ahmc-empty{color:var(--mu);font-size:13px;padding:6px 0}
+    .ahmc-copied{font-size:12px;color:var(--ok);min-width:60px}
     </style>
 
-    <div id="ahm-wrap">
+    <div class="ahmc">
 
-    <?php if ( isset( $notices[ $msg ] ) ) : [ $ntype, $ntext ] = $notices[ $msg ]; ?>
-    <div class="ahm-notice success"><span class="dashicons dashicons-yes-alt"></span> <?php echo esc_html( $ntext ); ?></div>
+    <div class="ahmc-top">
+        <h1><span class="ahmc-logo"><?php echo rmai_admin_icon( 'plug', 18 ); ?></span> AHM Connect</h1>
+        <span class="ahmc-badge">v<?php echo esc_html( RMAI_VERSION ); ?></span>
+        <span class="ahmc-badge"><span class="ahmc-dot <?php echo $api_enabled ? 'ok' : 'bad'; ?>"></span>API <?php echo $api_enabled ? 'activa' : 'desactivada'; ?></span>
+        <?php if ( $ahm_sites_connected ) : ?>
+            <span class="ahmc-badge"><span class="ahmc-dot ok"></span>AHM Sites</span>
+        <?php endif; ?>
+        <span class="ahmc-sp"></span>
+        <?php if ( $api_enabled ) : ?>
+            <a href="<?php echo esc_url( $toggle_url ); ?>" class="ahmc-btn danger" onclick="return confirm('¿Desactivar la API? La clave se rotará automáticamente.')"><?php echo rmai_admin_icon( 'power', 15 ); ?> Desactivar API</a>
+        <?php else : ?>
+            <a href="<?php echo esc_url( $toggle_url ); ?>" class="ahmc-btn pri" onclick="return confirm('¿Activar la API? La clave se rotará automáticamente.')"><?php echo rmai_admin_icon( 'power', 15 ); ?> Activar API</a>
+        <?php endif; ?>
+    </div>
+
+    <?php if ( isset( $notices[ $msg ] ) ) : ?>
+        <div class="ahmc-alert good" role="status"><?php echo rmai_admin_icon( 'check', 18 ); ?><div><?php echo esc_html( $notices[ $msg ] ); ?></div></div>
+    <?php endif; ?>
+    <?php if ( ! $api_enabled ) : ?>
+        <div class="ahmc-alert bad" role="status"><?php echo rmai_admin_icon( 'alert', 18 ); ?><div><strong>API desactivada.</strong> Ninguna herramienta externa puede conectarse (responde 503). Al activarla se rota la clave.</div></div>
     <?php endif; ?>
 
-    <!-- HEADER -->
-    <div class="ahm-header">
-        <div class="ahm-header-left">
-            <div class="ahm-logo"><span class="dashicons dashicons-rest-api"></span></div>
+    <nav class="ahmc-seg" aria-label="Secciones de AHM Connect">
+        <?php foreach ( $tabs as $k => [ $ic, $label ] ) : ?>
+            <a href="<?php echo esc_url( rmai_admin_tab_url( $k ) ); ?>"<?php echo $k === $tab ? ' aria-current="page"' : ''; ?>><?php echo rmai_admin_icon( $ic, 15 ); ?> <?php echo esc_html( $label ); ?><?php if ( 'log' === $k && $log_count ) : ?> <span class="ahmc-n"><?php echo (int) $log_count; ?></span><?php endif; ?></a>
+        <?php endforeach; ?>
+    </nav>
+
+    <?php if ( 'resumen' === $tab ) : ?>
+
+    <div class="ahmc-grid ahmc-g3">
+
+        <!-- Clave del día -->
+        <section class="ahmc-card" aria-labelledby="ahmc-h-key">
+            <h2 id="ahmc-h-key"><?php echo rmai_admin_icon( 'key' ); ?> Clave del día</h2>
+            <p class="ahmc-lead">Cabecera <code>X-RMAI-Key</code> en cada petición. Se renueva sola cada medianoche.</p>
+            <label class="screen-reader-text" for="ahm-api-key">API Key</label>
+            <div class="ahmc-field">
+                <input type="password" class="ahmc-key" id="ahm-api-key" value="<?php echo esc_attr( $api_key ); ?>" readonly autocomplete="off" spellcheck="false" onfocus="this.select()">
+                <button type="button" class="ahmc-btn sm" onclick="ahmcReveal('ahm-api-key',this)" aria-pressed="false" title="Mostrar u ocultar la clave"><?php echo rmai_admin_icon( 'eye', 15 ); ?><span class="screen-reader-text">Mostrar clave</span></button>
+            </div>
+            <div class="ahmc-flex" style="margin-top:10px">
+                <button type="button" class="ahmc-btn sm pri" onclick="ahmcCopy('ahm-api-key','ahm-copied')"><?php echo rmai_admin_icon( 'copy', 15 ); ?> Copiar</button>
+                <form method="post" style="margin:0">
+                    <?php wp_nonce_field( 'rmai_regenerate_key_action' ); ?>
+                    <button type="submit" name="rmai_regenerate_key" class="ahmc-btn sm" onclick="return confirm('¿Regenerar la clave? Los clientes actuales perderán acceso.')"><?php echo rmai_admin_icon( 'refresh', 15 ); ?> Regenerar</button>
+                </form>
+                <span id="ahm-copied" class="ahmc-copied" aria-live="polite"></span>
+            </div>
+            <div class="ahmc-sep"></div>
+            <div class="ahmc-mu" style="margin-bottom:4px">URL base</div>
+            <div class="ahmc-field">
+                <input type="text" id="ahmc-base-url" class="ahmc-key" value="<?php echo esc_attr( $base_url ); ?>" readonly onfocus="this.select()" aria-label="URL base de la API">
+                <button type="button" class="ahmc-btn sm" onclick="ahmcCopy('ahmc-base-url','ahmc-base-copied')" title="Copiar URL base"><?php echo rmai_admin_icon( 'copy', 15 ); ?><span class="screen-reader-text">Copiar URL base</span></button>
+            </div>
+            <span id="ahmc-base-copied" class="ahmc-copied" aria-live="polite"></span>
+        </section>
+
+        <!-- AHM Sites -->
+        <section class="ahmc-card" aria-labelledby="ahmc-h-sites">
+            <h2 id="ahmc-h-sites"><?php echo rmai_admin_icon( 'link' ); ?> AHM Sites</h2>
+            <p class="ahmc-lead">Gestiona esta web desde el panel central (actualizaciones, seguridad, monitorización) con un emparejamiento de un solo uso.</p>
+            <div class="ahmc-flex" style="justify-content:space-between">
+                <span class="ahmc-badge"><span class="ahmc-dot <?php echo $ahm_sites_connected ? 'ok' : ( $ahm_sites_enabled ? 'warn' : '' ); ?>"></span><?php echo $ahm_sites_connected ? 'Emparejado' : ( $ahm_sites_enabled ? 'Pendiente de emparejar' : 'Desactivado' ); ?></span>
+                <a href="<?php echo esc_url( $ahm_sites_toggle_url ); ?>" class="ahmc-btn sm <?php echo $ahm_sites_enabled ? 'danger' : 'pri'; ?>" onclick="return confirm('<?php echo $ahm_sites_enabled ? '¿Desactivar la conexión con AHM Sites?' : '¿Activar la conexión? Se generará un código de emparejamiento de un solo uso.'; ?>')"><?php echo rmai_admin_icon( 'power', 15 ); ?> <?php echo $ahm_sites_enabled ? 'Desactivar' : 'Activar'; ?></a>
+            </div>
+            <p class="ahmc-mu" style="margin:10px 0 0"><?php echo $ahm_sites_enabled ? 'El plugin reporta al panel cada 15 min.' : 'Actívalo para generar un código de emparejamiento.'; ?></p>
+
+            <?php if ( $ahm_sites_new_code ) : ?>
+                <div class="ahmc-alert warn" style="margin:12px 0 0;display:block">
+                    <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px"><?php echo rmai_admin_icon( 'alert', 16 ); ?><strong>Código de emparejamiento: cópialo ahora. Caduca en 10 minutos y no se volverá a mostrar.</strong></div>
+                    <label class="screen-reader-text" for="ahm-sites-code">Código de emparejamiento</label>
+                    <div class="ahmc-field">
+                        <input type="text" class="ahmc-key" id="ahm-sites-code" value="<?php echo esc_attr( $ahm_sites_new_code ); ?>" readonly onfocus="this.select()">
+                        <button type="button" class="ahmc-btn sm" onclick="ahmcCopy('ahm-sites-code','ahm-sites-copied')"><?php echo rmai_admin_icon( 'copy', 15 ); ?> Copiar</button>
+                    </div>
+                    <span id="ahm-sites-copied" class="ahmc-copied" aria-live="polite"></span>
+                    <div style="font-size:12px;margin-top:4px">Pégalo en el panel AHM Sites para completar el emparejamiento de este sitio.</div>
+                </div>
+            <?php elseif ( $ahm_sites_enabled && ! $ahm_sites_connected ) : ?>
+                <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:12px">
+                    <input type="hidden" name="action" value="rmai_ahm_sites_generate_code">
+                    <?php wp_nonce_field( 'rmai_ahm_sites_generate_code_action' ); ?>
+                    <button type="submit" class="ahmc-btn sm"><?php echo rmai_admin_icon( 'refresh', 15 ); ?> Generar nuevo código</button>
+                </form>
+            <?php endif; ?>
+
+            <?php if ( $ahm_sites_connected ) : ?>
+                <div class="ahmc-sep"></div>
+                <dl class="ahmc-kv">
+                    <dt>Site ID</dt><dd><?php echo esc_html( $ahm_sites_site_id ); ?></dd>
+                    <dt>Panel</dt><dd><?php echo esc_html( $ahm_sites_panel_url ); ?></dd>
+                </dl>
+            <?php endif; ?>
+
+            <details style="margin-top:12px">
+                <summary>Rotación del secret de AHM Sites</summary>
+                <div>
+                    <p class="ahmc-mu" style="margin-top:0">El secret de esta conexión (distinto de la API Key) lo rota automáticamente <strong>el panel AHM Sites</strong>, de forma firmada, sin intervención manual aquí.</p>
+                    <button type="button" class="ahmc-btn sm" disabled title="La rotación la inicia el panel AHM Sites, no este plugin"><?php echo rmai_admin_icon( 'refresh', 15 ); ?> Rotar clave AHM Sites</button>
+                </div>
+            </details>
+        </section>
+
+        <!-- Sitio -->
+        <section class="ahmc-card" aria-labelledby="ahmc-h-site">
+            <h2 id="ahmc-h-site"><?php echo rmai_admin_icon( 'globe' ); ?> Sitio</h2>
+            <p class="ahmc-lead"><a href="<?php echo esc_url( get_site_url() ); ?>" target="_blank" rel="noopener"><?php echo esc_html( get_bloginfo( 'name' ) ); ?> <?php echo rmai_admin_icon( 'external', 13 ); ?></a></p>
+            <div class="ahmc-grid ahmc-g3" style="gap:8px;margin-bottom:14px">
+                <div><div class="ahmc-big"><?php echo esc_html( number_format_i18n( wp_count_posts()->publish + wp_count_posts( 'page' )->publish ) ); ?></div><div class="ahmc-mu">Posts + páginas</div></div>
+                <div><div class="ahmc-big"><?php echo esc_html( count( get_post_types( [ 'public' => true ] ) ) ); ?></div><div class="ahmc-mu">Tipos públicos</div></div>
+                <div><div class="ahmc-big"><?php echo esc_html( $log_count ); ?></div><div class="ahmc-mu">En el log</div></div>
+            </div>
+            <dl class="ahmc-kv">
+                <dt>WordPress</dt><dd><?php echo esc_html( get_bloginfo( 'version' ) ); ?></dd>
+                <dt>PHP</dt><dd><?php echo esc_html( PHP_VERSION ); ?></dd>
+                <dt>Rank Math</dt><dd><?php echo $rm_ver ? esc_html( $rm_ver ) : '<span class="ahmc-pill">No instalado</span>'; ?></dd>
+                <dt>WooCommerce</dt><dd><?php echo $wc_ver ? esc_html( $wc_ver ) : '<span class="ahmc-pill">No instalado</span>'; ?></dd>
+                <dt>Elementor</dt><dd><?php echo $el_ver ? esc_html( $el_ver ) : '<span class="ahmc-pill">No instalado</span>'; ?></dd>
+            </dl>
+        </section>
+
+    </div>
+
+    <!-- Ajustes -->
+    <form method="post" class="ahmc-card" style="margin-top:16px" aria-labelledby="ahmc-h-set">
+        <?php wp_nonce_field( 'rmai_save_settings_action' ); ?>
+        <div class="ahmc-flex" style="justify-content:space-between;margin-bottom:6px">
+            <h2 id="ahmc-h-set" style="margin:0"><?php echo rmai_admin_icon( 'shield' ); ?> Acceso y límites</h2>
+            <button type="submit" name="rmai_save_settings" class="ahmc-btn pri">Guardar ajustes</button>
+        </div>
+        <div class="ahmc-grid ahmc-g2" style="gap:0 32px">
             <div>
-                <h1>AHM Connect <span>v<?php echo esc_html( RMAI_VERSION ); ?></span></h1>
-                <p>API REST para gestión de contenido, SEO y automatización</p>
+                <h3 style="margin-top:10px">Grupos de rutas</h3>
+                <?php
+                rmai_admin_switch_row( 'group_power', (bool) $settings['group_power'], 'Power Tools',
+                    'Gutenberg, Skills, Design, insertar secciones Elementor y subir medios' . ( $groups['power'] !== (bool) $settings['group_power'] ? ' · <strong>forzado por código (filtro rmai_route_groups)</strong>' : '' ), 'zap' );
+                rmai_admin_switch_row( 'group_files', (bool) $settings['group_files'], 'Ficheros (solo lectura)',
+                    '<code>/files/*</code>: listar y leer ficheros de la web. Desactivado por defecto; actívalo solo donde haga falta' . ( $groups['files'] !== (bool) $settings['group_files'] ? ' · <strong>forzado por código (filtro rmai_route_groups)</strong>' : '' ), 'folder' );
+                rmai_admin_switch_row( 'log_enabled', (bool) $settings['log_enabled'], 'Log de accesos',
+                    'Registrar las últimas ' . (int) RMAI_LOG_MAX . ' peticiones', 'list' );
+                ?>
             </div>
-        </div>
-        <span class="ahm-badge">aquihaymarketing.es</span>
-    </div>
-
-    <!-- STATUS BAR -->
-    <div class="ahm-status <?php echo $api_enabled ? 'on' : 'off'; ?>">
-        <div style="display:flex;align-items:center;gap:12px">
-            <div class="ahm-status-dot"></div>
             <div>
-                <div class="ahm-status-text"><?php echo $api_enabled ? 'API Activa' : 'API Desactivada'; ?></div>
-                <div class="ahm-status-sub"><?php echo $api_enabled ? 'Las herramientas externas tienen acceso. Al desactivar se rota la clave.' : 'Ninguna herramienta externa puede conectarse. Al activar se rota la clave.'; ?></div>
-            </div>
-        </div>
-        <?php if ( $api_enabled ) : ?>
-            <a href="<?php echo esc_url( $toggle_url ); ?>" class="ahm-btn ahm-btn-danger" onclick="return confirm('¿Desactivar la API? La clave se rotará automáticamente.')">
-                <span class="dashicons dashicons-controls-pause"></span> Desactivar API
-            </a>
-        <?php else : ?>
-            <a href="<?php echo esc_url( $toggle_url ); ?>" class="ahm-btn ahm-btn-success" onclick="return confirm('¿Activar la API? La clave se rotará automáticamente.')">
-                <span class="dashicons dashicons-controls-play"></span> Activar API
-            </a>
-        <?php endif; ?>
-    </div>
-
-    <!-- STATS ROW -->
-    <div class="ahm-grid-3" style="margin-bottom:24px">
-        <div class="ahm-stat">
-            <div class="ahm-stat-val"><?php echo esc_html( $log_count ); ?></div>
-            <div class="ahm-stat-label">Peticiones en log</div>
-        </div>
-        <div class="ahm-stat">
-            <div class="ahm-stat-val"><?php echo esc_html( count( get_post_types( [ 'public' => true ] ) ) ); ?></div>
-            <div class="ahm-stat-label">Tipos de contenido</div>
-        </div>
-        <div class="ahm-stat">
-            <div class="ahm-stat-val"><?php echo esc_html( wp_count_posts()->publish + wp_count_posts( 'page' )->publish ); ?></div>
-            <div class="ahm-stat-label">Posts + Páginas</div>
-        </div>
-    </div>
-
-    <!-- TABS -->
-    <div class="ahm-tabs">
-        <button class="ahm-tab active" onclick="ahmTab(this,'tab-main')"><span class="dashicons dashicons-admin-generic"></span> Configuración</button>
-        <button class="ahm-tab" onclick="ahmTab(this,'tab-endpoints')"><span class="dashicons dashicons-networking"></span> Endpoints</button>
-        <button class="ahm-tab" onclick="ahmTab(this,'tab-geo')"><span class="dashicons dashicons-chart-line"></span> SEO / GEO</button>
-        <button class="ahm-tab" onclick="ahmTab(this,'tab-ahmsites')"><span class="dashicons dashicons-admin-links"></span> AHM Sites<?php if ( $ahm_sites_connected ) : ?> <span style="background:#22c55e;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px">ON</span><?php endif; ?></button>
-        <?php if ( $settings['log_enabled'] && ! empty( $log ) ) : ?>
-        <button class="ahm-tab" onclick="ahmTab(this,'tab-log')"><span class="dashicons dashicons-clipboard"></span> Log <span style="background:#ef4444;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-left:4px"><?php echo $log_count; ?></span></button>
-        <?php endif; ?>
-    </div>
-
-    <!-- TAB: CONFIGURACIÓN -->
-    <div id="tab-main" class="ahm-tab-content active">
-        <div class="ahm-grid">
-
-            <!-- API Key -->
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon blue"><span class="dashicons dashicons-admin-network"></span></div>
-                    <div class="ahm-card-title">API Key</div>
+                <h3 style="margin-top:10px">Límites y red</h3>
+                <?php
+                rmai_admin_switch_row( 'rate_limit_enabled', (bool) $settings['rate_limit_enabled'], 'Límite de peticiones',
+                    'Máx. ' . (int) rmai_rate_limit() . ' peticiones por minuto e IP (ventana fija de 60 s)', 'gauge' );
+                ?>
+                <div class="ahmc-row">
+                    <span class="ahmc-row-ic"><?php echo rmai_admin_icon( 'gauge', 16 ); ?></span>
+                    <div class="ahmc-grow">
+                        <label class="ahmc-row-t" for="ahmc-rate-limit">Peticiones por minuto</label>
+                        <?php if ( RMAI_RATE_LIMIT_LOCKED ) : ?>
+                            <div class="ahmc-mu">Fijado en <code>wp-config.php</code> (RMAI_RATE_LIMIT = <?php echo esc_html( (int) RMAI_RATE_LIMIT ); ?>).</div>
+                        <?php else : ?>
+                            <div class="ahmc-mu">Entre 1 y <?php echo (int) RMAI_RATE_LIMIT_MAX; ?>.</div>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ( ! RMAI_RATE_LIMIT_LOCKED ) : ?>
+                        <input type="number" id="ahmc-rate-limit" name="rate_limit" min="1" max="<?php echo esc_attr( RMAI_RATE_LIMIT_MAX ); ?>" value="<?php echo esc_attr( rmai_rate_limit() ); ?>" style="width:90px">
+                    <?php endif; ?>
                 </div>
-                <div class="ahm-card-body">
-                    <p style="font-size:12px;color:#64748b;margin:0 0 12px">Incluye en la cabecera <code style="background:#f1f5f9;padding:1px 5px;border-radius:4px">X-RMAI-Key</code> de cada petición.</p>
-                    <div class="ahm-key-wrap">
-                        <input type="text" class="ahm-key-input" id="ahm-api-key" value="<?php echo esc_attr( $api_key ); ?>" readonly onclick="this.select()">
-                        <button class="ahm-copy-btn" title="Copiar clave" onclick="ahmCopy()"><span class="dashicons dashicons-clipboard"></span></button>
-                    </div>
-                    <div style="display:flex;gap:8px;align-items:center">
-                        <form method="post" style="margin:0">
-                            <?php wp_nonce_field( 'rmai_regenerate_key_action' ); ?>
-                            <button type="submit" name="rmai_regenerate_key" class="ahm-btn ahm-btn-ghost ahm-btn-sm" onclick="return confirm('¿Regenerar la clave? Los clientes actuales perderán acceso.')">
-                                <span class="dashicons dashicons-update"></span> Regenerar clave
-                            </button>
-                        </form>
-                        <span id="ahm-copied" style="color:#22c55e;font-size:12px;display:none">✓ Copiada</span>
-                    </div>
-                    <div style="margin-top:14px;padding:10px 12px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
-                        <div style="font-size:11px;color:#64748b;margin-bottom:4px;font-weight:600">BASE URL</div>
-                        <code style="font-size:11px;color:#334155;word-break:break-all"><?php echo esc_html( $base_url ); ?></code>
+                <div class="ahmc-row" style="align-items:flex-start">
+                    <span class="ahmc-row-ic"><?php echo rmai_admin_icon( 'server', 16 ); ?></span>
+                    <div class="ahmc-grow">
+                        <label class="ahmc-row-t" for="ip_whitelist">IPs permitidas</label>
+                        <div class="ahmc-mu" style="margin-bottom:6px">Vacío = todas. Separar por coma.</div>
+                        <input type="text" id="ip_whitelist" name="ip_whitelist" value="<?php echo esc_attr( $settings['ip_whitelist'] ); ?>" placeholder="1.2.3.4, 5.6.7.8" style="width:100%">
                     </div>
                 </div>
             </div>
-
-            <!-- Info del sitio -->
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon green"><span class="dashicons dashicons-admin-site-alt3"></span></div>
-                    <div class="ahm-card-title">Información del sitio</div>
-                </div>
-                <div class="ahm-card-body">
-                    <table class="ahm-info-table">
-                        <tr><td>Sitio</td><td><?php echo esc_html( get_bloginfo( 'name' ) ); ?></td></tr>
-                        <tr><td>URL</td><td><a href="<?php echo esc_url( get_site_url() ); ?>" target="_blank" style="color:#3b82f6"><?php echo esc_html( get_site_url() ); ?></a></td></tr>
-                        <tr><td>WordPress</td><td><span class="ahm-pill ahm-pill-blue">v<?php echo esc_html( get_bloginfo( 'version' ) ); ?></span></td></tr>
-                        <tr><td>PHP</td><td><span class="ahm-pill ahm-pill-gray">v<?php echo esc_html( PHP_VERSION ); ?></span></td></tr>
-                        <tr><td>Rank Math</td><td><?php echo $rm_ver ? '<span class="ahm-pill ahm-pill-green">v' . esc_html( $rm_ver ) . '</span>' : '<span class="ahm-pill ahm-pill-gray">No instalado</span>'; ?></td></tr>
-                        <tr><td>WooCommerce</td><td><?php echo $wc_ver ? '<span class="ahm-pill ahm-pill-blue">v' . esc_html( $wc_ver ) . '</span>' : '<span class="ahm-pill ahm-pill-gray">No instalado</span>'; ?></td></tr>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Ajustes de seguridad -->
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon purple"><span class="dashicons dashicons-shield"></span></div>
-                    <div class="ahm-card-title">Seguridad y límites</div>
-                </div>
-                <div class="ahm-card-body">
-                    <form method="post">
-                        <?php wp_nonce_field( 'rmai_save_settings_action' ); ?>
-
-                        <div class="ahm-toggle-row">
-                            <div>
-                                <div class="ahm-toggle-label">Límite de peticiones</div>
-                                <div class="ahm-toggle-desc">Máx. <?php echo esc_html( rmai_rate_limit() ); ?> peticiones/minuto por IP (ventana fija de 60 s)</div>
-                            </div>
-                            <label class="ahm-switch">
-                                <input type="checkbox" name="rate_limit_enabled" <?php checked( $settings['rate_limit_enabled'] ); ?>>
-                                <span class="ahm-slider"></span>
-                            </label>
-                        </div>
-
-                        <div style="margin-top:4px;margin-bottom:8px">
-                            <div class="ahm-toggle-label" style="margin-bottom:4px">Peticiones por minuto</div>
-                            <?php if ( RMAI_RATE_LIMIT_LOCKED ) : ?>
-                                <div class="ahm-toggle-desc">Fijado en <code>wp-config.php</code> (RMAI_RATE_LIMIT = <?php echo esc_html( (int) RMAI_RATE_LIMIT ); ?>).</div>
-                            <?php else : ?>
-                                <input type="number" name="rate_limit" class="ahm-input" min="1" max="<?php echo esc_attr( RMAI_RATE_LIMIT_MAX ); ?>" value="<?php echo esc_attr( rmai_rate_limit() ); ?>" style="max-width:120px">
-                            <?php endif; ?>
-                        </div>
-
-                        <?php $rmai_groups = rmai_route_groups(); ?>
-                        <div class="ahm-toggle-row">
-                            <div>
-                                <div class="ahm-toggle-label">Power Tools</div>
-                                <div class="ahm-toggle-desc">Gutenberg, Skills, Design, insertar secciones Elementor y subir medios<?php echo $rmai_groups['power'] !== (bool) $settings['group_power'] ? ' · <strong>forzado por código (filtro rmai_route_groups)</strong>' : ''; ?></div>
-                            </div>
-                            <label class="ahm-switch">
-                                <input type="checkbox" name="group_power" <?php checked( $settings['group_power'] ); ?>>
-                                <span class="ahm-slider"></span>
-                            </label>
-                        </div>
-
-                        <div class="ahm-toggle-row">
-                            <div>
-                                <div class="ahm-toggle-label">Ficheros (solo lectura)</div>
-                                <div class="ahm-toggle-desc">/files/*: listar y leer ficheros de la web. Desactivado por defecto; actívalo solo donde haga falta<?php echo $rmai_groups['files'] !== (bool) $settings['group_files'] ? ' · <strong>forzado por código (filtro rmai_route_groups)</strong>' : ''; ?></div>
-                            </div>
-                            <label class="ahm-switch">
-                                <input type="checkbox" name="group_files" <?php checked( $settings['group_files'] ); ?>>
-                                <span class="ahm-slider"></span>
-                            </label>
-                        </div>
-
-                        <div class="ahm-toggle-row">
-                            <div>
-                                <div class="ahm-toggle-label">Log de accesos</div>
-                                <div class="ahm-toggle-desc">Registrar últimas <?php echo esc_html( RMAI_LOG_MAX ); ?> peticiones</div>
-                            </div>
-                            <label class="ahm-switch">
-                                <input type="checkbox" name="log_enabled" <?php checked( $settings['log_enabled'] ); ?>>
-                                <span class="ahm-slider"></span>
-                            </label>
-                        </div>
-
-                        <div style="margin-top:12px">
-                            <div class="ahm-toggle-label" style="margin-bottom:4px">IPs permitidas</div>
-                            <div class="ahm-toggle-desc" style="margin-bottom:6px">Vacío = todas. Separar por coma.</div>
-                            <input type="text" id="ip_whitelist" name="ip_whitelist" class="ahm-input" value="<?php echo esc_attr( $settings['ip_whitelist'] ); ?>" placeholder="1.2.3.4, 5.6.7.8">
-                        </div>
-
-                        <div style="margin-top:16px">
-                            <button type="submit" name="rmai_save_settings" class="ahm-btn ahm-btn-primary">Guardar ajustes</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
         </div>
-    </div>
+    </form>
 
-    <!-- TAB: ENDPOINTS -->
-    <div id="tab-endpoints" class="ahm-tab-content">
-        <div class="ahm-card">
-            <div class="ahm-card-body" style="column-count:2;column-gap:32px">
-
-                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-media-document"></span> Contenido y SEO</div>
-                    <?php
-                    $endpoints = [
-                        ['GET',    '/posts',                  'Listar entradas (?missing= ?seo_score_lt=)'],
-                        ['GET',    '/post/{id}',              'SEO + contenido de una entrada'],
-                        ['PUT',    '/post/{id}',              'Actualizar campos SEO'],
-                        ['PUT',    '/post/{id}/content',      'Actualizar post_content / excerpt'],
-                        ['POST',   '/post/{id}/elementor-replace', 'Sustituir texto dentro de _elementor_data'],
-                        ['POST',   '/bulk-update',            'Actualizar SEO en lote'],
-                        ['POST',   '/bulk-content',           'Actualizar contenido, título o slug en lote'],
-                        ['GET',    '/post/{id}/score',        'Puntuación SEO Rank Math'],
-                        ['POST',   '/create-post',            'Crear entrada/página/producto'],
-                        ['POST',   '/recalculate-scores',     'Recalcular scores Rank Math'],
-                        ['GET',    '/post-types',             'Tipos de contenido'],
-                        ['GET',    '/info',                   'Info del sitio + plugin'],
-                    ];
-                    foreach ( $endpoints as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-chart-bar"></span> Auditoría SEO</div>
-                    <?php
-                    $endpoints2 = [
-                        ['GET',    '/seo/report',             'Dashboard ejecutivo: keywords, scores, alt, 404s'],
-                        ['GET',    '/seo/images',             'Imágenes sin alt en todo el sitio'],
-                        ['GET',    '/seo/duplicates',         'Meta titles/descriptions duplicados'],
-                        ['GET',    '/seo/orphans',            'Páginas sin enlaces internos'],
-                        ['GET',    '/seo',                    'Audit SEO completo del sitio'],
-                        ['GET',    '/seo/post/{id}',          'Audit + sugerencias para un post'],
-                        ['POST',   '/seo/apply/{id}',         'Aplica optimizaciones automáticamente'],
-                        ['GET',    '/seo/sitemap',            'Audita el sitemap'],
-                        ['GET',    '/seo/404',                'Errores 404 detectados'],
-                        ['GET',    '/seo/noindex',            'Páginas que deberían ser noindex'],
-                    ];
-                    foreach ( $endpoints2 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-search"></span> GEO — Buscadores IA</div>
-                    <?php
-                    $endpoints3 = [
-                        ['GET',    '/seo/geo',                'Audit: robots.txt, llms.txt, schema, E-E-A-T'],
-                        ['GET',    '/seo/geo/generate',       'Genera llms.txt / llms-full.txt'],
-                        ['POST',   '/seo/geo/write-llms-txt', 'Escribe llms.txt en la raíz del servidor'],
-                    ];
-                    foreach ( $endpoints3 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-format-image"></span> Imágenes y Media</div>
-                    <?php
-                    $endpoints4 = [
-                        ['GET',    '/post/{id}/images',       'Imágenes del post + check alt/keyword'],
-                        ['PUT',    '/post/{id}/images',       'Asignar imagen destacada'],
-                        ['GET',    '/media',                  'Biblioteca de imágenes (?missing_alt=true)'],
-                        ['PUT',    '/media/{id}',             'Actualizar alt, title, caption'],
-                        ['POST',   '/bulk-media-alt',         'Actualizar alt en lote [{id, alt}]'],
-                    ];
-                    foreach ( $endpoints4 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-randomize"></span> Redirections</div>
-                    <?php
-                    $endpoints5 = [
-                        ['GET',    '/redirections',           'Listar redirections Rank Math'],
-                        ['POST',   '/redirections',           'Crear 301/302/307 {from, to, code}'],
-                        ['DELETE', '/redirections/{id}',      'Eliminar una redirection'],
-                    ];
-                    foreach ( $endpoints5 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-editor-code"></span> Schema JSON-LD</div>
-                    <?php
-                    $endpoints6 = [
-                        ['GET',    '/seo/schema/{id}',        'Leer schemas JSON-LD de un post'],
-                        ['POST',   '/seo/schema/{id}',        'Añadir FAQPage, BreadcrumbList, etc.'],
-                        ['DELETE', '/seo/schema/{id}',        'Eliminar schemas de un post'],
-                        ['GET',    '/seo/breadcrumbs',        'Estado breadcrumbs Rank Math'],
-                        ['POST',   '/seo/breadcrumbs',        'Activar breadcrumbs Rank Math'],
-                    ];
-                    foreach ( $endpoints6 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-cart"></span> WooCommerce</div>
-                    <?php
-                    $endpoints7 = [
-                        ['POST',  '/bulk-attributes',          'Merge atributos _product_attributes'],
-                        ['GET',   '/post/{id}/meta',           'Leer post meta (atributos, precio…)'],
-                        ['POST',  '/post/{id}/meta',           'Escribir post meta'],
-                    ];
-                    foreach ( $endpoints7 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-admin-tools"></span> Herramientas</div>
-                    <?php
-                    $endpoints8 = [
-                        ['POST',  '/tools/flush-rewrite',      'Regenerar reglas de rewrite (sitemap 404, etc.)'],
-                        ['POST',  '/tools/flush-cache',        'Purgar caché (Elementor + LiteSpeed…); post_id opcional, sin él global'],
-                    ];
-                    foreach ( $endpoints8 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-block-default"></span> Gutenberg <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
-                    <?php
-                    $endpoints9 = [
-                        ['GET',   '/gutenberg/blocks',        'Listar bloques registrados'],
-                        ['POST',  '/gutenberg/validate',      'Dry-run: parsear y devolver árbol de bloques'],
-                        ['POST',  '/gutenberg/post',          'Crear post con bloques (sin kses)'],
-                        ['PUT',   '/gutenberg/post/{id}',     'Reescribir bloques de un post'],
-                    ];
-                    foreach ( $endpoints9 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-book"></span> Skills <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
-                    <?php
-                    $endpoints10 = [
-                        ['GET',    '/skills',       'Listar skills con descripción'],
-                        ['POST',   '/skills',       'Crear skill {name, description, content}'],
-                        ['GET',    '/skills/{id}',  'Leer skill completa (Markdown)'],
-                        ['PUT',    '/skills/{id}',  'Actualizar skill'],
-                        ['DELETE', '/skills/{id}',  'Borrar skill'],
-                    ];
-                    foreach ( $endpoints10 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-art"></span> Design <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
-                    <?php
-                    $endpoints11 = [
-                        ['GET',    '/design',                          'Leer dirección de diseño global'],
-                        ['PUT',    '/design',                          'Guardar paleta/tipo/espaciado/tono/reglas'],
-                        ['DELETE', '/design',                          'Restablecer dirección de diseño'],
-                        ['GET',    '/design/elementor-kit',            'Leer Kit clásico (colores, tipo, CSS)'],
-                        ['POST',   '/design/elementor-kit',            'Escribir Kit clásico + regenerar CSS'],
-                        ['POST',   '/design/elementor-regenerate-css', 'Regenerar CSS global de Elementor'],
-                    ];
-                    foreach ( $endpoints11 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-                <div class="ahm-ep-section" style="break-inside:avoid">
-                    <div class="ahm-ep-group"><span class="dashicons dashicons-superhero"></span> Power Tools <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
-                    <?php
-                    $endpoints12 = [
-                        ['POST',  '/post/{id}/elementor-section', 'Insertar sección Elementor clásico'],
-                        ['POST',  '/media/upload',               'Subir medio por URL o base64'],
-                        ['GET',   '/files/list',                 'Listar directorio (bajo ABSPATH)'],
-                        ['GET',   '/files/tree',                 'Árbol con profundidad (solo lectura)'],
-                        ['GET',   '/files/read',                 'Leer fichero de texto (solo lectura)'],
-                        ['GET',   '/files/search',               'Buscar por nombre/contenido (lectura)'],
-                    ];
-                    foreach ( $endpoints12 as [$m,$p,$d] ) {
-                        $mc = strtolower( $m );
-                        echo "<div class='ahm-ep-row'><span class='ahm-method {$mc}'>{$m}</span><span class='ahm-ep-path'>" . esc_html($p) . "</span><span class='ahm-ep-desc'>" . esc_html($d) . "</span></div>";
-                    }
-                    ?>
-                </div>
-
-            </div>
+    <?php elseif ( 'endpoints' === $tab ) :
+        $ep_groups = [
+            [ 'file', 'Contenido y SEO', '', [
+                ['GET',    '/posts',                  'Listar entradas (?missing= ?seo_score_lt=)'],
+                ['GET',    '/post/{id}',              'SEO + contenido de una entrada'],
+                ['PUT',    '/post/{id}',              'Actualizar campos SEO'],
+                ['PUT',    '/post/{id}/content',      'Actualizar post_content / excerpt'],
+                ['POST',   '/post/{id}/elementor-replace', 'Sustituir texto dentro de _elementor_data'],
+                ['POST',   '/bulk-update',            'Actualizar SEO en lote'],
+                ['POST',   '/bulk-content',           'Actualizar contenido, título o slug en lote'],
+                ['GET',    '/post/{id}/score',        'Puntuación SEO Rank Math'],
+                ['POST',   '/create-post',            'Crear entrada/página/producto'],
+                ['POST',   '/recalculate-scores',     'Recalcular scores Rank Math'],
+                ['GET',    '/post-types',             'Tipos de contenido'],
+                ['GET',    '/info',                   'Info del sitio + plugin'],
+            ] ],
+            [ 'chart', 'Auditoría SEO', '', [
+                ['GET',    '/seo/report',             'Dashboard ejecutivo: keywords, scores, alt, 404s'],
+                ['GET',    '/seo/images',             'Imágenes sin alt en todo el sitio'],
+                ['GET',    '/seo/duplicates',         'Meta titles/descriptions duplicados'],
+                ['GET',    '/seo/orphans',            'Páginas sin enlaces internos'],
+                ['GET',    '/seo',                    'Audit SEO completo del sitio'],
+                ['GET',    '/seo/post/{id}',          'Audit + sugerencias para un post'],
+                ['POST',   '/seo/apply/{id}',         'Aplica optimizaciones automáticamente'],
+                ['GET',    '/seo/sitemap',            'Audita el sitemap'],
+                ['GET',    '/seo/404',                'Errores 404 detectados'],
+                ['GET',    '/seo/noindex',            'Páginas que deberían ser noindex'],
+            ] ],
+            [ 'globe', 'GEO — buscadores IA', '', [
+                ['GET',    '/seo/geo',                'Audit: robots.txt, llms.txt, schema, E-E-A-T'],
+                ['GET',    '/seo/geo/generate',       'Genera llms.txt / llms-full.txt'],
+                ['POST',   '/seo/geo/write-llms-txt', 'Escribe llms.txt en la raíz del servidor'],
+            ] ],
+            [ 'file', 'Imágenes y media', '', [
+                ['GET',    '/post/{id}/images',       'Imágenes del post + check alt/keyword'],
+                ['PUT',    '/post/{id}/images',       'Asignar imagen destacada'],
+                ['GET',    '/media',                  'Biblioteca de imágenes (?missing_alt=true)'],
+                ['PUT',    '/media/{id}',             'Actualizar alt, title, caption'],
+                ['POST',   '/bulk-media-alt',         'Actualizar alt en lote [{id, alt}]'],
+            ] ],
+            [ 'link', 'Redirections', '', [
+                ['GET',    '/redirections',           'Listar redirections Rank Math'],
+                ['POST',   '/redirections',           'Crear 301/302/307 {from, to, code}'],
+                ['DELETE', '/redirections/{id}',      'Eliminar una redirection'],
+            ] ],
+            [ 'code', 'Schema JSON-LD', '', [
+                ['GET',    '/seo/schema/{id}',        'Leer schemas JSON-LD de un post'],
+                ['POST',   '/seo/schema/{id}',        'Añadir FAQPage, BreadcrumbList, etc.'],
+                ['DELETE', '/seo/schema/{id}',        'Eliminar schemas de un post'],
+                ['GET',    '/seo/breadcrumbs',        'Estado breadcrumbs Rank Math'],
+                ['POST',   '/seo/breadcrumbs',        'Activar breadcrumbs Rank Math'],
+            ] ],
+            [ 'server', 'WooCommerce y meta', '', [
+                ['POST',  '/bulk-attributes',          'Merge atributos _product_attributes'],
+                ['GET',   '/post/{id}/meta',           'Leer post meta (atributos, precio…)'],
+                ['POST',  '/post/{id}/meta',           'Escribir post meta'],
+            ] ],
+            [ 'refresh', 'Herramientas', '', [
+                ['POST',  '/tools/flush-rewrite',      'Regenerar reglas de rewrite (sitemap 404, etc.)'],
+                ['POST',  '/tools/flush-cache',        'Purgar caché (Elementor + LiteSpeed…); post_id opcional, sin él global'],
+            ] ],
+            [ 'zap', 'Gutenberg', 'power', [
+                ['GET',   '/gutenberg/blocks',        'Listar bloques registrados'],
+                ['POST',  '/gutenberg/validate',      'Dry-run: parsear y devolver árbol de bloques'],
+                ['POST',  '/gutenberg/post',          'Crear post con bloques (sin kses)'],
+                ['PUT',   '/gutenberg/post/{id}',     'Reescribir bloques de un post'],
+            ] ],
+            [ 'book', 'Skills', 'power', [
+                ['GET',    '/skills',       'Listar skills con descripción'],
+                ['POST',   '/skills',       'Crear skill {name, description, content}'],
+                ['GET',    '/skills/{id}',  'Leer skill completa (Markdown)'],
+                ['PUT',    '/skills/{id}',  'Actualizar skill'],
+                ['DELETE', '/skills/{id}',  'Borrar skill'],
+            ] ],
+            [ 'zap', 'Design', 'power', [
+                ['GET',    '/design',                          'Leer dirección de diseño global'],
+                ['PUT',    '/design',                          'Guardar paleta/tipo/espaciado/tono/reglas'],
+                ['DELETE', '/design',                          'Restablecer dirección de diseño'],
+                ['GET',    '/design/elementor-kit',            'Leer Kit clásico (colores, tipo, CSS)'],
+                ['POST',   '/design/elementor-kit',            'Escribir Kit clásico + regenerar CSS'],
+                ['POST',   '/design/elementor-regenerate-css', 'Regenerar CSS global de Elementor'],
+            ] ],
+            [ 'zap', 'Elementor clásico y medios', 'power', [
+                ['POST',  '/post/{id}/elementor-section', 'Insertar sección Elementor clásico'],
+                ['POST',  '/media/upload',               'Subir medio por URL o base64'],
+            ] ],
+            [ 'folder', 'Ficheros (solo lectura)', 'files', [
+                ['GET',   '/files/list',                 'Listar directorio (bajo ABSPATH)'],
+                ['GET',   '/files/tree',                 'Árbol con profundidad (solo lectura)'],
+                ['GET',   '/files/read',                 'Leer fichero de texto (solo lectura)'],
+                ['GET',   '/files/search',               'Buscar por nombre/contenido (lectura)'],
+            ] ],
+        ];
+        ?>
+        <div class="ahmc-card" style="margin-bottom:16px">
+            <div class="ahmc-flex"><span class="ahmc-mu">Base</span><code><?php echo esc_html( $base_url ); ?></code><span class="ahmc-sp"></span><span class="ahmc-mu">Todas las rutas piden la cabecera <code>X-RMAI-Key</code>.</span></div>
         </div>
-    </div>
-
-    <!-- TAB: LOG -->
-    <?php if ( $settings['log_enabled'] && ! empty( $log ) ) : ?>
-    <div id="tab-log" class="ahm-tab-content">
-        <div class="ahm-card">
-            <div class="ahm-card-header" style="justify-content:space-between">
-                <div style="display:flex;align-items:center;gap:10px">
-                    <div class="ahm-card-icon slate"><span class="dashicons dashicons-clipboard"></span></div>
-                    <div class="ahm-card-title">Últimas <?php echo $log_count; ?> peticiones</div>
+        <div class="ahmc-grid ahmc-g2">
+        <?php foreach ( $ep_groups as [ $ic, $title, $grp, $rows ] ) :
+            $off = $grp && empty( $groups[ $grp ] ); ?>
+            <section class="ahmc-card" style="padding:14px 16px">
+                <h2 style="font-size:14px;margin-bottom:8px"><?php echo rmai_admin_icon( $ic ); ?> <?php echo esc_html( $title ); ?>
+                    <?php if ( $grp ) : ?><span class="ahmc-pill <?php echo $off ? '' : 'ok'; ?>" style="margin-left:auto"><?php echo esc_html( ( 'files' === $grp ? 'Ficheros' : 'Power Tools' ) . ( $off ? ' · desactivado' : ' · activo' ) ); ?></span><?php endif; ?>
+                </h2>
+                <div class="ahmc-scroll">
+                <table class="ahmc-table"><tbody>
+                <?php foreach ( $rows as [ $m, $p, $d ] ) : ?>
+                    <tr<?php echo $off ? ' style="opacity:.55"' : ''; ?>><td style="width:60px"><span class="ahmc-m <?php echo esc_attr( strtolower( $m ) ); ?>"><?php echo esc_html( $m ); ?></span></td><td class="ahmc-mono" style="white-space:nowrap"><?php echo esc_html( $p ); ?></td><td class="ahmc-mu"><?php echo esc_html( $d ); ?></td></tr>
+                <?php endforeach; ?>
+                </tbody></table>
                 </div>
+            </section>
+        <?php endforeach; ?>
+        </div>
+
+    <?php elseif ( 'log' === $tab ) : ?>
+
+        <section class="ahmc-card" aria-labelledby="ahmc-h-log">
+            <div class="ahmc-flex" style="justify-content:space-between;margin-bottom:10px">
+                <h2 id="ahmc-h-log" style="margin:0"><?php echo rmai_admin_icon( 'list' ); ?> Últimas <?php echo (int) $log_count; ?> peticiones</h2>
                 <form method="post" style="margin:0">
                     <?php wp_nonce_field( 'rmai_clear_log_action' ); ?>
-                    <button type="submit" name="rmai_clear_log" class="ahm-btn ahm-btn-ghost ahm-btn-sm"><span class="dashicons dashicons-trash"></span> Borrar log</button>
+                    <button type="submit" name="rmai_clear_log" class="ahmc-btn sm"<?php echo $log_count ? '' : ' disabled'; ?>><?php echo rmai_admin_icon( 'trash', 15 ); ?> Borrar log</button>
                 </form>
             </div>
-            <div style="overflow-x:auto">
-                <table class="ahm-log-table">
-                    <thead>
-                        <tr><th>Fecha</th><th>Método</th><th>Ruta</th><th>Estado</th><th>IP</th></tr>
-                    </thead>
+            <?php if ( ! $settings['log_enabled'] ) : ?>
+                <div class="ahmc-alert warn"><?php echo rmai_admin_icon( 'info', 16 ); ?><div>El log está desactivado. Actívalo en <a href="<?php echo esc_url( rmai_admin_tab_url( 'resumen' ) ); ?>">Resumen → Acceso y límites</a>.</div></div>
+            <?php endif; ?>
+            <?php if ( ! $log ) : ?>
+                <div class="ahmc-empty">Sin peticiones registradas.</div>
+            <?php else : ?>
+                <div class="ahmc-scroll">
+                <table class="ahmc-table">
+                    <thead><tr><th scope="col">Fecha</th><th scope="col">Método</th><th scope="col">Ruta</th><th scope="col">Estado</th><th scope="col">IP</th></tr></thead>
                     <tbody>
-                        <?php foreach ( array_reverse( $log ) as $entry ) :
-                            $s = (int) $entry['status'];
-                            $sc = $s >= 400 ? 'err' : ( $s >= 300 ? 'warn' : 'ok' );
-                        ?>
+                    <?php foreach ( array_reverse( $log ) as $entry ) :
+                        $s  = (int) ( $entry['status'] ?? 0 );
+                        $sc = $s >= 400 ? 'bad' : ( $s >= 300 ? 'warn' : 'ok' ); ?>
                         <tr>
-                            <td style="white-space:nowrap;color:#64748b"><?php echo esc_html( $entry['date'] ); ?></td>
-                            <td><code style="font-size:11px;background:#f1f5f9;padding:2px 6px;border-radius:4px"><?php echo esc_html( $entry['method'] ); ?></code></td>
-                            <td><code style="font-size:11px;color:#334155"><?php echo esc_html( $entry['route'] ); ?></code></td>
-                            <td><span class="ahm-status-code <?php echo $sc; ?>"><?php echo esc_html( $entry['status'] ); ?></span></td>
-                            <td style="color:#94a3b8;font-size:11px"><?php echo esc_html( $entry['ip'] ); ?></td>
+                            <td class="ahmc-mu" style="white-space:nowrap"><?php echo esc_html( $entry['date'] ?? '' ); ?></td>
+                            <td><span class="ahmc-m <?php echo esc_attr( strtolower( (string) ( $entry['method'] ?? '' ) ) ); ?>"><?php echo esc_html( $entry['method'] ?? '' ); ?></span></td>
+                            <td class="ahmc-mono" style="overflow-wrap:anywhere"><?php echo esc_html( $entry['route'] ?? '' ); ?></td>
+                            <td><span class="ahmc-pill <?php echo esc_attr( $sc ); ?>"><?php echo esc_html( $entry['status'] ?? '' ); ?></span></td>
+                            <td class="ahmc-mu"><?php echo esc_html( $entry['ip'] ?? '' ); ?></td>
                         </tr>
-                        <?php endforeach; ?>
+                    <?php endforeach; ?>
                     </tbody>
                 </table>
-            </div>
-        </div>
-    </div>
-    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        </section>
 
-    <!-- TAB: GEO / IA -->
-    <div id="tab-geo" class="ahm-tab-content">
-        <?php
-        // Load GEO data server-side by calling internal functions directly
+    <?php elseif ( 'docs' === $tab ) : ?>
+
+        <div class="ahmc-grid ahmc-g2">
+            <section class="ahmc-card">
+                <h2><?php echo rmai_admin_icon( 'book' ); ?> Cómo conectar</h2>
+                <p class="ahmc-lead">Todas las peticiones llevan la clave del día en la cabecera <code>X-RMAI-Key</code>. La clave rota cada medianoche: las integraciones deben leerla de nuevo cada día.</p>
+                <pre>curl -s "<?php echo esc_html( $base_url ); ?>/info" \
+  -H "X-RMAI-Key: &lt;clave&gt;"</pre>
+                <div class="ahmc-sep"></div>
+                <dl class="ahmc-kv" style="grid-template-columns:auto 1fr">
+                    <dt>401</dt><dd style="text-align:left">Clave ausente o incorrecta</dd>
+                    <dt>403</dt><dd style="text-align:left">IP fuera de la lista permitida, o fichero protegido</dd>
+                    <dt>404</dt><dd style="text-align:left">Ruta inexistente o grupo desactivado</dd>
+                    <dt>429</dt><dd style="text-align:left">Límite de peticiones superado (incluye <code>retry_after</code>)</dd>
+                    <dt>503</dt><dd style="text-align:left">API desactivada</dd>
+                </dl>
+            </section>
+            <section class="ahmc-card">
+                <h2><?php echo rmai_admin_icon( 'code' ); ?> Ajustes por código</h2>
+                <p class="ahmc-lead">Constantes para <code>wp-config.php</code> y filtros para un mu-plugin.</p>
+                <table class="ahmc-table"><tbody>
+                    <tr><td class="ahmc-mono">RMAI_RATE_LIMIT</td><td class="ahmc-mu">Peticiones por minuto; manda sobre el panel</td></tr>
+                    <tr><td class="ahmc-mono">RMAI_MEDIA_MAX_MB</td><td class="ahmc-mu">Tope de <code>/media/upload</code> (20 por defecto)</td></tr>
+                    <tr><td class="ahmc-mono">RMAI_DISABLE_UPDATES</td><td class="ahmc-mu">No actualizar desde el repositorio</td></tr>
+                    <tr><td class="ahmc-mono">RMAI_TRUSTED_PROXIES</td><td class="ahmc-mu">IPs de proxy de confianza (cabeceras de IP real)</td></tr>
+                    <tr><td class="ahmc-mono">rmai_route_groups</td><td class="ahmc-mu">Filtro: forzar grupos <code>power</code> / <code>files</code></td></tr>
+                    <tr><td class="ahmc-mono">rmai_files_blocked</td><td class="ahmc-mu">Filtro: proteger más rutas en <code>/files/*</code></td></tr>
+                    <tr><td class="ahmc-mono">ahm_frame_ancestors</td><td class="ahmc-mu">Filtro: orígenes que pueden enmarcar la web</td></tr>
+                </tbody></table>
+            </section>
+            <section class="ahmc-card">
+                <h2><?php echo rmai_admin_icon( 'shield' ); ?> Qué no hace, a propósito</h2>
+                <p class="ahmc-lead" style="margin-bottom:0">No ejecuta PHP, no escribe ni borra ficheros, no usa WP-CLI, no instala plugins ni temas y no crea enlaces de acceso. El contenido de páginas Elementor solo se toca vía <code>_elementor_data</code> (<code>/post/{id}/meta</code>, <code>/elementor-replace</code>, <code>/elementor-section</code>), nunca con <code>post_content</code>. Tras escribir, la API purga sola la caché de Elementor y de página del post tocado.</p>
+            </section>
+        </div>
+
+    <?php elseif ( 'seo' === $tab ) :
+        // Datos GEO calculados en servidor llamando a las funciones internas.
         $geo_data     = null;
         $geo_error    = null;
         $geo_req      = new WP_REST_Request( 'GET', '/' . RMAI_NAMESPACE . '/seo/geo' );
@@ -960,7 +901,7 @@ function rmai_settings_page(): void {
             $geo_data = $geo_response->get_data();
         }
 
-        // Page SEO scores summary via wpdb
+        // Resumen de puntuaciones SEO vía wpdb.
         global $wpdb;
         $scores_raw = $wpdb->get_results(
             "SELECT pm.meta_value AS score, COUNT(*) AS total
@@ -974,12 +915,12 @@ function rmai_settings_page(): void {
         );
         $score_buckets = [ 'poor' => 0, 'ok' => 0, 'good' => 0 ];
         $scored_total  = 0;
-        foreach ( $scores_raw as $row ) {
+        foreach ( (array) $scores_raw as $row ) {
             $s = (int) $row['score'];
             $scored_total += (int) $row['total'];
             if ( $s < 50 )       $score_buckets['poor'] += (int) $row['total'];
             elseif ( $s < 80 )   $score_buckets['ok']   += (int) $row['total'];
-            else                 $score_buckets['good']  += (int) $row['total'];
+            else                 $score_buckets['good'] += (int) $row['total'];
         }
         $avg_score = $scored_total ? (int) $wpdb->get_var(
             "SELECT AVG(CAST(meta_value AS UNSIGNED))
@@ -989,7 +930,6 @@ function rmai_settings_page(): void {
                AND p.post_status = 'publish'
                AND p.post_type NOT IN ('attachment','revision','nav_menu_item')"
         ) : 0;
-
         $missing_kw = (int) $wpdb->get_var(
             "SELECT COUNT(DISTINCT p.ID)
              FROM {$wpdb->posts} p
@@ -1006,17 +946,39 @@ function rmai_settings_page(): void {
                AND p.post_type NOT IN ('attachment','revision','nav_menu_item','wp_block')
                AND (pm.meta_value IS NULL OR pm.meta_value = '')"
         );
+        $ok_ic  = '<span class="ahmc-ok-ic">' . rmai_admin_icon( 'check', 15 ) . '</span>';
+        $bad_ic = '<span class="ahmc-bad-ic">' . rmai_admin_icon( 'x', 15 ) . '</span>';
         ?>
 
         <?php if ( $geo_error ) : ?>
-        <div class="ahm-notice" style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c"><span class="dashicons dashicons-warning"></span> <?php echo esc_html( $geo_error ); ?></div>
+            <div class="ahmc-alert bad"><?php echo rmai_admin_icon( 'alert', 16 ); ?><div><?php echo esc_html( $geo_error ); ?></div></div>
         <?php endif; ?>
 
+        <!-- Scores SEO -->
+        <section class="ahmc-card" style="margin-bottom:16px" aria-labelledby="ahmc-h-scores">
+            <h2 id="ahmc-h-scores"><?php echo rmai_admin_icon( 'chart' ); ?> Scores SEO del sitio <span class="ahmc-mu" style="font-weight:400">Rank Math</span></h2>
+            <div class="ahmc-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin:12px 0 14px">
+                <div><div class="ahmc-big" style="color:<?php echo $avg_score >= 70 ? 'var(--ok)' : ( $avg_score >= 40 ? 'var(--warn)' : 'var(--bad)' ); ?>"><?php echo (int) $avg_score; ?></div><div class="ahmc-mu">Score medio</div></div>
+                <div><div class="ahmc-big"><?php echo (int) $scored_total; ?></div><div class="ahmc-mu">Con score</div></div>
+                <div><div class="ahmc-big"><?php echo (int) $score_buckets['good']; ?></div><div class="ahmc-mu">Buenos (80+)</div></div>
+                <div><div class="ahmc-big"><?php echo (int) $score_buckets['ok']; ?></div><div class="ahmc-mu">Mejorables (50-79)</div></div>
+                <div><div class="ahmc-big"><?php echo (int) $score_buckets['poor']; ?></div><div class="ahmc-mu">Pobres (&lt;50)</div></div>
+                <div><div class="ahmc-big" style="color:<?php echo $missing_kw ? 'var(--bad)' : 'var(--ok)'; ?>"><?php echo (int) $missing_kw; ?></div><div class="ahmc-mu">Sin keyword</div><div class="ahmc-mu ahmc-mono" style="font-size:11px">?missing=focus_keyword</div></div>
+                <div><div class="ahmc-big" style="color:<?php echo $missing_desc ? 'var(--bad)' : 'var(--ok)'; ?>"><?php echo (int) $missing_desc; ?></div><div class="ahmc-mu">Sin description</div><div class="ahmc-mu ahmc-mono" style="font-size:11px">?missing=seo_description</div></div>
+            </div>
+            <?php if ( $scored_total > 0 ) : ?>
+                <div class="ahmc-bar" role="img" aria-label="<?php echo esc_attr( sprintf( 'Pobres %d, mejorables %d, buenos %d', $score_buckets['poor'], $score_buckets['ok'], $score_buckets['good'] ) ); ?>">
+                    <?php foreach ( [ 'poor' => 'var(--bad)', 'ok' => 'var(--warn)', 'good' => 'var(--ok)' ] as $bk => $bc ) : if ( $score_buckets[ $bk ] ) : ?>
+                        <div style="width:<?php echo esc_attr( round( $score_buckets[ $bk ] / $scored_total * 100 ) ); ?>%;background:<?php echo esc_attr( $bc ); ?>"></div>
+                    <?php endif; endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </section>
+
         <?php if ( $geo_data ) :
-            $geo_score  = (int) ( $geo_data['geo_score'] ?? 0 );
-            $geo_rating = $geo_data['geo_rating'] ?? 'poor';
-            $score_color = $geo_score >= 70 ? '#22c55e' : ( $geo_score >= 40 ? '#f59e0b' : '#ef4444' );
-            $score_bg    = $geo_score >= 70 ? '#f0fdf4' : ( $geo_score >= 40 ? '#fffbeb' : '#fef2f2' );
+            $geo_score   = (int) ( $geo_data['geo_score'] ?? 0 );
+            $geo_rating  = $geo_data['geo_rating'] ?? 'poor';
+            $score_color = $geo_score >= 70 ? 'var(--ok)' : ( $geo_score >= 40 ? 'var(--warn)' : 'var(--bad)' );
             $checks      = $geo_data['checks'] ?? [];
             $recs        = $geo_data['recommendations'] ?? [];
             $robots      = $geo_data['robots_txt'] ?? [];
@@ -1024,407 +986,127 @@ function rmai_settings_page(): void {
             $schema      = $geo_data['schema'] ?? [];
             $eat         = $geo_data['eat_signals'] ?? [];
         ?>
-
-        <!-- GEO Score + Page Scores -->
-        <div style="display:grid;grid-template-columns:220px 1fr;gap:20px;margin-bottom:20px">
-
-            <!-- GEO Score big -->
-            <div class="ahm-card" style="text-align:center">
-                <div class="ahm-card-body" style="padding:28px 20px">
-                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:12px">GEO Score</div>
-                    <div style="width:100px;height:100px;border-radius:50%;background:conic-gradient(<?php echo $score_color; ?> <?php echo $geo_score * 3.6; ?>deg, #e2e8f0 0);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;position:relative">
-                        <div style="width:76px;height:76px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column">
-                            <span style="font-size:26px;font-weight:800;color:<?php echo $score_color; ?>;line-height:1"><?php echo $geo_score; ?></span>
-                            <span style="font-size:10px;color:#94a3b8">/100</span>
-                        </div>
-                    </div>
-                    <div style="display:inline-block;padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;background:<?php echo $score_bg; ?>;color:<?php echo $score_color; ?>;text-transform:uppercase;letter-spacing:.05em">
-                        <?php echo esc_html( $geo_rating ); ?>
-                    </div>
-                    <div style="font-size:11px;color:#94a3b8;margin-top:8px"><?php echo esc_html( $geo_data['site_url'] ?? '' ); ?></div>
+        <div class="ahmc-grid" style="grid-template-columns:minmax(200px,240px) minmax(0,1fr);margin-bottom:16px">
+            <section class="ahmc-card" style="text-align:center">
+                <h3>GEO score</h3>
+                <div style="width:104px;height:104px;border-radius:50%;background:conic-gradient(<?php echo esc_attr( $score_color ); ?> <?php echo esc_attr( $geo_score * 3.6 ); ?>deg,#f4f4f5 0);display:grid;place-items:center;margin:4px auto 10px" role="img" aria-label="GEO score <?php echo (int) $geo_score; ?> de 100">
+                    <div style="width:82px;height:82px;background:#fff;border-radius:50%;display:grid;place-items:center"><div><div class="ahmc-big"><?php echo (int) $geo_score; ?></div><div class="ahmc-mu">/100</div></div></div>
                 </div>
-            </div>
-
-            <!-- Checks grid -->
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon blue"><span class="dashicons dashicons-yes-alt"></span></div>
-                    <div class="ahm-card-title">Checks GEO</div>
-                </div>
-                <div class="ahm-card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                    <?php foreach ( $checks as $check ) :
-                        $pass = (bool) $check['pass'];
-                        $ic   = $pass ? '✓' : '✗';
-                        $cc   = $pass ? '#22c55e' : '#ef4444';
-                        $cb   = $pass ? '#f0fdf4' : '#fef2f2';
-                        $w    = (int) ( $check['weight'] ?? 0 );
-                    ?>
-                    <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:<?php echo $cb; ?>;border-radius:8px;border:1px solid <?php echo $pass ? '#bbf7d0' : '#fecaca'; ?>">
-                        <span style="font-size:13px;font-weight:700;color:<?php echo $cc; ?>;flex-shrink:0;margin-top:1px"><?php echo $ic; ?></span>
-                        <div>
-                            <div style="font-size:12px;font-weight:500;color:#334155;line-height:1.3"><?php echo esc_html( $check['label'] ); ?></div>
-                            <div style="font-size:10px;color:#94a3b8;margin-top:2px">peso: <?php echo $w; ?>pts</div>
-                        </div>
-                    </div>
+                <span class="ahmc-pill <?php echo $geo_score >= 70 ? 'ok' : ( $geo_score >= 40 ? 'warn' : 'bad' ); ?>"><?php echo esc_html( $geo_rating ); ?></span>
+                <div class="ahmc-mu" style="margin-top:8px;overflow-wrap:anywhere"><?php echo esc_html( $geo_data['site_url'] ?? '' ); ?></div>
+            </section>
+            <section class="ahmc-card">
+                <h2><?php echo rmai_admin_icon( 'check' ); ?> Checks GEO</h2>
+                <div class="ahmc-grid ahmc-g2" style="gap:8px;margin-top:10px">
+                    <?php foreach ( $checks as $check ) : $pass = ! empty( $check['pass'] ); ?>
+                        <div class="ahmc-check"><?php echo $pass ? $ok_ic : $bad_ic; ?><div><div style="font-weight:500"><?php echo esc_html( $check['label'] ?? '' ); ?></div><div class="ahmc-mu">peso: <?php echo (int) ( $check['weight'] ?? 0 ); ?> pts · <?php echo $pass ? 'cumple' : 'no cumple'; ?></div></div></div>
                     <?php endforeach; ?>
                 </div>
-            </div>
+            </section>
         </div>
 
-        <!-- llms.txt + robots.txt -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
-
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon orange"><span class="dashicons dashicons-media-text"></span></div>
-                    <div class="ahm-card-title">llms.txt</div>
-                </div>
-                <div class="ahm-card-body">
-                    <?php
-                    $llms_ok   = ! empty( $llms['exists'] );
-                    $llmsfull  = ! empty( $llms['full_exists'] );
-                    ?>
-                    <div style="display:flex;flex-direction:column;gap:10px">
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:<?php echo $llms_ok ? '#f0fdf4' : '#fef2f2'; ?>;border-radius:8px;border:1px solid <?php echo $llms_ok ? '#bbf7d0' : '#fecaca'; ?>">
-                            <div>
-                                <div style="font-size:13px;font-weight:600;color:#334155">llms.txt</div>
-                                <?php if ( $llms_ok && ! empty( $llms['url'] ) ) : ?>
-                                <a href="<?php echo esc_url( $llms['url'] ); ?>" target="_blank" style="font-size:11px;color:#3b82f6"><?php echo esc_html( $llms['url'] ); ?></a>
-                                <?php endif; ?>
-                            </div>
-                            <span style="font-weight:700;color:<?php echo $llms_ok ? '#22c55e' : '#ef4444'; ?>;font-size:15px"><?php echo $llms_ok ? '✓' : '✗'; ?></span>
-                        </div>
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:<?php echo $llmsfull ? '#f0fdf4' : '#fef2f2'; ?>;border-radius:8px;border:1px solid <?php echo $llmsfull ? '#bbf7d0' : '#fecaca'; ?>">
-                            <div>
-                                <div style="font-size:13px;font-weight:600;color:#334155">llms-full.txt</div>
-                                <?php if ( $llmsfull && ! empty( $llms['full_url'] ) ) : ?>
-                                <a href="<?php echo esc_url( $llms['full_url'] ); ?>" target="_blank" style="font-size:11px;color:#3b82f6"><?php echo esc_html( $llms['full_url'] ); ?></a>
-                                <?php endif; ?>
-                            </div>
-                            <span style="font-weight:700;color:<?php echo $llmsfull ? '#22c55e' : '#ef4444'; ?>;font-size:15px"><?php echo $llmsfull ? '✓' : '✗'; ?></span>
-                        </div>
-                        <?php if ( ! empty( $llms['preview'] ) ) : ?>
-                        <details style="margin-top:4px">
-                            <summary style="font-size:12px;color:#64748b;cursor:pointer">Vista previa llms.txt</summary>
-                            <pre style="font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-top:6px;max-height:140px;overflow-y:auto;white-space:pre-wrap"><?php echo esc_html( $llms['preview'] ); ?></pre>
-                        </details>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon slate"><span class="dashicons dashicons-admin-users"></span></div>
-                    <div class="ahm-card-title">Bots IA en robots.txt</div>
-                </div>
-                <div class="ahm-card-body">
-                    <?php
-                    $blocked = $robots['ai_blocked'] ?? [];
-                    $allowed = $robots['ai_allowed'] ?? [];
-                    ?>
-                    <?php if ( ! empty( $blocked ) ) : ?>
-                    <div style="margin-bottom:10px">
-                        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#ef4444;margin-bottom:6px;letter-spacing:.05em">Bloqueados (<?php echo count($blocked); ?>)</div>
-                        <div style="display:flex;flex-wrap:wrap;gap:6px">
-                            <?php foreach ( $blocked as $bot ) : ?>
-                            <span style="background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px"><?php echo esc_html( $bot['bot'] ); ?></span>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                    <?php if ( ! empty( $allowed ) ) : ?>
-                    <div>
-                        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#22c55e;margin-bottom:6px;letter-spacing:.05em">Permitidos (<?php echo count($allowed); ?>)</div>
-                        <div style="display:flex;flex-wrap:wrap;gap:6px">
-                            <?php foreach ( $allowed as $bot ) : ?>
-                            <span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px"><?php echo esc_html( $bot['bot'] ); ?></span>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                    <?php if ( empty( $blocked ) && empty( $allowed ) ) : ?>
-                    <p style="color:#22c55e;font-size:13px;font-weight:600">✓ Ningún bot IA bloqueado — acceso libre</p>
-                    <?php endif; ?>
-                </div>
-            </div>
+        <div class="ahmc-grid ahmc-g2" style="margin-bottom:16px">
+            <section class="ahmc-card">
+                <h2><?php echo rmai_admin_icon( 'file' ); ?> llms.txt</h2>
+                <?php $llms_ok = ! empty( $llms['exists'] ); $llmsfull = ! empty( $llms['full_exists'] ); ?>
+                <table class="ahmc-table" style="margin-top:6px"><tbody>
+                    <tr><td style="width:28px"><?php echo $llms_ok ? $ok_ic : $bad_ic; ?></td><td><strong>llms.txt</strong> <span class="screen-reader-text"><?php echo $llms_ok ? 'existe' : 'no existe'; ?></span><?php if ( $llms_ok && ! empty( $llms['url'] ) ) : ?><div><a href="<?php echo esc_url( $llms['url'] ); ?>" target="_blank" rel="noopener" class="ahmc-mu"><?php echo esc_html( $llms['url'] ); ?></a></div><?php endif; ?></td></tr>
+                    <tr><td><?php echo $llmsfull ? $ok_ic : $bad_ic; ?></td><td><strong>llms-full.txt</strong> <span class="screen-reader-text"><?php echo $llmsfull ? 'existe' : 'no existe'; ?></span><?php if ( $llmsfull && ! empty( $llms['full_url'] ) ) : ?><div><a href="<?php echo esc_url( $llms['full_url'] ); ?>" target="_blank" rel="noopener" class="ahmc-mu"><?php echo esc_html( $llms['full_url'] ); ?></a></div><?php endif; ?></td></tr>
+                </tbody></table>
+                <?php if ( ! empty( $llms['preview'] ) ) : ?>
+                    <details style="margin-top:10px"><summary>Vista previa de llms.txt</summary><div><pre><?php echo esc_html( $llms['preview'] ); ?></pre></div></details>
+                <?php endif; ?>
+            </section>
+            <section class="ahmc-card">
+                <h2><?php echo rmai_admin_icon( 'users' ); ?> Bots IA en robots.txt</h2>
+                <?php $blocked = $robots['ai_blocked'] ?? []; $allowed = $robots['ai_allowed'] ?? []; ?>
+                <?php if ( $blocked ) : ?>
+                    <h3 style="margin-top:10px">Bloqueados (<?php echo count( $blocked ); ?>)</h3>
+                    <div class="ahmc-flex" style="gap:6px"><?php foreach ( $blocked as $bot ) : ?><span class="ahmc-pill bad"><?php echo esc_html( $bot['bot'] ?? '' ); ?></span><?php endforeach; ?></div>
+                <?php endif; ?>
+                <?php if ( $allowed ) : ?>
+                    <h3 style="margin-top:10px">Permitidos (<?php echo count( $allowed ); ?>)</h3>
+                    <div class="ahmc-flex" style="gap:6px"><?php foreach ( $allowed as $bot ) : ?><span class="ahmc-pill ok"><?php echo esc_html( $bot['bot'] ?? '' ); ?></span><?php endforeach; ?></div>
+                <?php endif; ?>
+                <?php if ( ! $blocked && ! $allowed ) : ?>
+                    <p class="ahmc-flex" style="margin:10px 0 0"><?php echo $ok_ic; ?> Ningún bot IA bloqueado: acceso libre.</p>
+                <?php endif; ?>
+            </section>
+            <section class="ahmc-card">
+                <h2><?php echo rmai_admin_icon( 'code' ); ?> Schema.org detectado</h2>
+                <?php $schema_ok = $schema['ok'] ?? []; $schema_missing = $schema['missing'] ?? []; ?>
+                <?php if ( $schema_ok ) : ?>
+                    <h3 style="margin-top:10px">Presentes</h3>
+                    <div class="ahmc-flex" style="gap:6px"><?php foreach ( $schema_ok as $s ) : ?><span class="ahmc-pill ok"><?php echo esc_html( $s ); ?></span><?php endforeach; ?></div>
+                <?php endif; ?>
+                <?php if ( $schema_missing ) : ?>
+                    <h3 style="margin-top:10px">Faltan</h3>
+                    <div class="ahmc-flex" style="gap:6px"><?php foreach ( $schema_missing as $s ) : ?><span class="ahmc-pill warn"><?php echo esc_html( $s ); ?></span><?php endforeach; ?></div>
+                <?php endif; ?>
+            </section>
+            <section class="ahmc-card">
+                <h2><?php echo rmai_admin_icon( 'users' ); ?> Señales E-E-A-T</h2>
+                <?php $authors = $eat['authors'] ?? []; $legal_pgs = $eat['legal_pages'] ?? []; ?>
+                <?php if ( $authors ) : ?>
+                    <h3 style="margin-top:10px">Autores</h3>
+                    <table class="ahmc-table"><tbody>
+                    <?php foreach ( $authors as $author ) : $bio_ok = ! empty( $author['has_bio'] ); $av_ok = ! empty( $author['has_avatar'] ); ?>
+                        <tr><td><?php echo esc_html( $author['name'] ?? '' ); ?></td><td style="text-align:right"><span class="ahmc-pill <?php echo $bio_ok ? 'ok' : 'bad'; ?>">bio</span> <span class="ahmc-pill <?php echo $av_ok ? 'ok' : 'bad'; ?>">avatar</span></td></tr>
+                    <?php endforeach; ?>
+                    </tbody></table>
+                <?php endif; ?>
+                <?php if ( $legal_pgs ) : ?>
+                    <h3 style="margin-top:10px">Páginas legales</h3>
+                    <?php foreach ( $legal_pgs as $pg ) : ?>
+                        <a href="<?php echo esc_url( $pg['url'] ?? '' ); ?>" target="_blank" rel="noopener" style="display:block;margin-bottom:2px"><?php echo esc_html( $pg['slug'] ?? '' ); ?></a>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </section>
         </div>
 
-        <!-- Schema + E-E-A-T -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
-
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon purple"><span class="dashicons dashicons-editor-code"></span></div>
-                    <div class="ahm-card-title">Schema.org detectado</div>
-                </div>
-                <div class="ahm-card-body">
-                    <?php
-                    $schema_ok      = $schema['ok'] ?? [];
-                    $schema_missing = $schema['missing'] ?? [];
-                    ?>
-                    <?php if ( ! empty( $schema_ok ) ) : ?>
-                    <div style="margin-bottom:12px">
-                        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#22c55e;margin-bottom:6px;letter-spacing:.05em">Presentes</div>
-                        <div style="display:flex;flex-wrap:wrap;gap:6px">
-                            <?php foreach ( $schema_ok as $s ) : ?>
-                            <span style="background:#dcfce7;color:#166534;font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px">✓ <?php echo esc_html($s); ?></span>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                    <?php if ( ! empty( $schema_missing ) ) : ?>
-                    <div>
-                        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#f59e0b;margin-bottom:6px;letter-spacing:.05em">Faltantes</div>
-                        <div style="display:flex;flex-wrap:wrap;gap:6px">
-                            <?php foreach ( $schema_missing as $s ) : ?>
-                            <span style="background:#fef9c3;color:#854d0e;font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px">✗ <?php echo esc_html($s); ?></span>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon green"><span class="dashicons dashicons-businessperson"></span></div>
-                    <div class="ahm-card-title">E-E-A-T Signals</div>
-                </div>
-                <div class="ahm-card-body">
-                    <?php
-                    $authors    = $eat['authors'] ?? [];
-                    $legal_pgs  = $eat['legal_pages'] ?? [];
-                    $key_pgs    = $eat['key_pages'] ?? [];
-                    ?>
-                    <?php if ( ! empty( $authors ) ) : ?>
-                    <div style="margin-bottom:12px">
-                        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:8px;letter-spacing:.05em">Autores</div>
-                        <?php foreach ( $authors as $author ) :
-                            $bio_ok = ! empty( $author['has_bio'] );
-                            $av_ok  = ! empty( $author['has_avatar'] );
-                        ?>
-                        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9">
-                            <span style="font-size:13px;font-weight:500;color:#334155"><?php echo esc_html( $author['name'] ); ?></span>
-                            <div style="display:flex;gap:6px">
-                                <span style="font-size:11px;padding:2px 7px;border-radius:10px;font-weight:600;background:<?php echo $bio_ok ? '#dcfce7' : '#fee2e2'; ?>;color:<?php echo $bio_ok ? '#166534' : '#b91c1c'; ?>">bio</span>
-                                <span style="font-size:11px;padding:2px 7px;border-radius:10px;font-weight:600;background:<?php echo $av_ok ? '#dcfce7' : '#fee2e2'; ?>;color:<?php echo $av_ok ? '#166534' : '#b91c1c'; ?>">avatar</span>
-                            </div>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-                    <?php endif; ?>
-                    <?php if ( ! empty( $legal_pgs ) ) : ?>
-                    <div>
-                        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:6px;letter-spacing:.05em">Páginas legales</div>
-                        <?php foreach ( $legal_pgs as $pg ) : ?>
-                        <a href="<?php echo esc_url($pg['url']); ?>" target="_blank" style="display:block;font-size:12px;color:#3b82f6;margin-bottom:2px"><?php echo esc_html($pg['slug']); ?></a>
-                        <?php endforeach; ?>
-                    </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recomendaciones -->
-        <?php if ( ! empty( $recs ) ) : ?>
-        <div class="ahm-card" style="margin-bottom:20px">
-            <div class="ahm-card-header">
-                <div class="ahm-card-icon orange"><span class="dashicons dashicons-lightbulb"></span></div>
-                <div class="ahm-card-title">Recomendaciones GEO</div>
-            </div>
-            <div class="ahm-card-body" style="display:flex;flex-direction:column;gap:10px">
+        <?php if ( $recs ) : ?>
+            <section class="ahmc-card">
+                <h2><?php echo rmai_admin_icon( 'bulb' ); ?> Recomendaciones GEO</h2>
+                <table class="ahmc-table" style="margin-top:6px"><tbody>
                 <?php foreach ( $recs as $rec ) :
-                    $prio   = $rec['priority'] ?? 'medium';
-                    $pcolors = [
-                        'critical' => ['#fef2f2','#fecaca','#b91c1c','#ef4444'],
-                        'high'     => ['#fff7ed','#fed7aa','#c2410c','#f97316'],
-                        'medium'   => ['#fffbeb','#fde68a','#92400e','#eab308'],
-                        'low'      => ['#f0fdf4','#bbf7d0','#166534','#22c55e'],
-                    ];
-                    [ $bg, $border, $tc, $dot ] = $pcolors[ $prio ] ?? $pcolors['medium'];
-                ?>
-                <div style="background:<?php echo $bg; ?>;border:1px solid <?php echo $border; ?>;border-radius:8px;padding:12px 14px">
-                    <div style="display:flex;align-items:flex-start;gap:10px">
-                        <span style="width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:4px;background:<?php echo esc_attr( $dot ); ?>"></span>
-                        <div>
-                            <div style="font-size:12px;font-weight:600;color:<?php echo $tc; ?>;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px"><?php echo esc_html( $prio ); ?><?php echo $rec['file'] ? ' — ' . esc_html( $rec['file'] ) : ''; ?></div>
-                            <div style="font-size:13px;color:#334155"><?php echo esc_html( $rec['action'] ); ?></div>
-                        </div>
-                    </div>
-                </div>
+                    $prio = $rec['priority'] ?? 'medium';
+                    $pc   = [ 'critical' => 'bad', 'high' => 'warn', 'medium' => 'info', 'low' => 'ok' ][ $prio ] ?? 'info'; ?>
+                    <tr><td style="width:90px"><span class="ahmc-pill <?php echo esc_attr( $pc ); ?>"><?php echo esc_html( $prio ); ?></span></td><td><?php echo esc_html( $rec['action'] ?? '' ); ?><?php if ( ! empty( $rec['file'] ) ) : ?> <code><?php echo esc_html( $rec['file'] ); ?></code><?php endif; ?></td></tr>
                 <?php endforeach; ?>
-            </div>
-        </div>
+                </tbody></table>
+            </section>
         <?php endif; ?>
 
-        <?php endif; // end $geo_data ?>
+        <?php endif; // $geo_data ?>
 
-        <!-- SEO Scores de páginas -->
-        <div class="ahm-card">
-            <div class="ahm-card-header">
-                <div class="ahm-card-icon blue"><span class="dashicons dashicons-chart-pie"></span></div>
-                <div class="ahm-card-title">Scores SEO del sitio (Rank Math)</div>
-            </div>
-            <div class="ahm-card-body">
-                <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
-                    <div class="ahm-stat">
-                        <div class="ahm-stat-val" style="color:<?php echo $avg_score >= 70 ? '#22c55e' : ($avg_score >= 40 ? '#f59e0b' : '#ef4444'); ?>"><?php echo $avg_score; ?></div>
-                        <div class="ahm-stat-label">Score medio</div>
-                    </div>
-                    <div class="ahm-stat">
-                        <div class="ahm-stat-val"><?php echo $scored_total; ?></div>
-                        <div class="ahm-stat-label">Con score</div>
-                    </div>
-                    <div class="ahm-stat">
-                        <div class="ahm-stat-val" style="color:#22c55e"><?php echo $score_buckets['good']; ?></div>
-                        <div class="ahm-stat-label">Buenos ≥80</div>
-                    </div>
-                    <div class="ahm-stat">
-                        <div class="ahm-stat-val" style="color:#f59e0b"><?php echo $score_buckets['ok']; ?></div>
-                        <div class="ahm-stat-label">Mejorables 50-79</div>
-                    </div>
-                    <div class="ahm-stat">
-                        <div class="ahm-stat-val" style="color:#ef4444"><?php echo $score_buckets['poor']; ?></div>
-                        <div class="ahm-stat-label">Pobres &lt;50</div>
-                    </div>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                    <div style="padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;display:flex;align-items:center;justify-content:space-between">
-                        <div>
-                            <div style="font-size:13px;font-weight:600;color:#334155">Sin keyword asignada</div>
-                            <div style="font-size:11px;color:#64748b;margin-top:2px">GET /posts?missing=focus_keyword</div>
-                        </div>
-                        <span style="font-size:26px;font-weight:800;color:#ef4444"><?php echo $missing_kw; ?></span>
-                    </div>
-                    <div style="padding:12px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;display:flex;align-items:center;justify-content:space-between">
-                        <div>
-                            <div style="font-size:13px;font-weight:600;color:#334155">Sin meta description</div>
-                            <div style="font-size:11px;color:#64748b;margin-top:2px">GET /posts?missing=seo_description</div>
-                        </div>
-                        <span style="font-size:26px;font-weight:800;color:#ef4444"><?php echo $missing_desc; ?></span>
-                    </div>
-                </div>
-                <?php if ( $scored_total > 0 ) : ?>
-                <div style="margin-top:16px">
-                    <div style="font-size:11px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Distribución de scores</div>
-                    <div style="height:10px;border-radius:6px;overflow:hidden;display:flex;background:#f1f5f9">
-                        <?php if ( $score_buckets['poor'] ) : ?>
-                        <div style="width:<?php echo round($score_buckets['poor']/$scored_total*100); ?>%;background:#ef4444;transition:.3s" title="Pobres: <?php echo $score_buckets['poor']; ?>"></div>
-                        <?php endif; ?>
-                        <?php if ( $score_buckets['ok'] ) : ?>
-                        <div style="width:<?php echo round($score_buckets['ok']/$scored_total*100); ?>%;background:#f59e0b;transition:.3s" title="Mejorables: <?php echo $score_buckets['ok']; ?>"></div>
-                        <?php endif; ?>
-                        <?php if ( $score_buckets['good'] ) : ?>
-                        <div style="width:<?php echo round($score_buckets['good']/$scored_total*100); ?>%;background:#22c55e;transition:.3s" title="Buenos: <?php echo $score_buckets['good']; ?>"></div>
-                        <?php endif; ?>
-                    </div>
-                    <div style="display:flex;gap:16px;margin-top:6px">
-                        <span style="font-size:11px;color:#ef4444"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:currentColor"></span> Pobres: <?php echo $score_buckets['poor']; ?></span>
-                        <span style="font-size:11px;color:#f59e0b"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:currentColor"></span> Mejorables: <?php echo $score_buckets['ok']; ?></span>
-                        <span style="font-size:11px;color:#22c55e"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:currentColor"></span> Buenos: <?php echo $score_buckets['good']; ?></span>
-                    </div>
-                </div>
-                <?php endif; ?>
-            </div>
-        </div>
+    <?php endif; // pestañas ?>
 
-    </div><!-- tab-geo -->
-
-    <!-- TAB: AHM SITES -->
-    <div id="tab-ahmsites" class="ahm-tab-content">
-        <div class="ahm-grid">
-
-            <!-- Estado / toggle -->
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon <?php echo $ahm_sites_enabled ? 'green' : 'slate'; ?>"><span class="dashicons dashicons-admin-links"></span></div>
-                    <div class="ahm-card-title">Conexión con AHM Sites</div>
-                </div>
-                <div class="ahm-card-body">
-                    <p style="font-size:12px;color:#64748b;margin:0 0 12px">Permite gestionar este sitio desde el panel central AHM Sites (actualizaciones, seguridad, monitorización) mediante un emparejamiento seguro de un solo uso.</p>
-
-                    <div class="ahm-toggle-row">
-                        <div>
-                            <div class="ahm-toggle-label">Emparejamiento con AHM Sites</div>
-                            <div class="ahm-toggle-desc"><?php echo $ahm_sites_enabled ? 'Activado. El plugin reporta al panel cada 15 min.' : 'Desactivado. Actívalo para generar un código de emparejamiento.'; ?></div>
-                        </div>
-                        <a href="<?php echo esc_url( $ahm_sites_toggle_url ); ?>" class="ahm-btn <?php echo $ahm_sites_enabled ? 'ahm-btn-danger' : 'ahm-btn-success'; ?> ahm-btn-sm" onclick="return confirm('<?php echo $ahm_sites_enabled ? '¿Desactivar la conexión con AHM Sites?' : '¿Activar la conexión? Se generará un código de emparejamiento de un solo uso.'; ?>')">
-                            <?php echo $ahm_sites_enabled ? '<span class="dashicons dashicons-controls-pause"></span> Desactivar' : '<span class="dashicons dashicons-controls-play"></span> Activar'; ?>
-                        </a>
-                    </div>
-
-                    <?php if ( $ahm_sites_new_code ) : ?>
-                    <div style="margin-top:16px;padding:14px 16px;border-radius:10px;background:#fffbeb;border:1.5px solid #fde68a">
-                        <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px"><span class="dashicons dashicons-warning" style="font-size:15px;width:15px;height:15px;vertical-align:-3px"></span> Código de emparejamiento — cópialo ahora, expira en 10 minutos y NO se volverá a mostrar</div>
-                        <div class="ahm-key-wrap" style="margin-bottom:4px">
-                            <input type="text" class="ahm-key-input" id="ahm-sites-code" value="<?php echo esc_attr( $ahm_sites_new_code ); ?>" readonly onclick="this.select()">
-                            <button class="ahm-copy-btn" title="Copiar código" onclick="ahmCopyGeneric('ahm-sites-code','ahm-sites-copied')"><span class="dashicons dashicons-clipboard"></span></button>
-                        </div>
-                        <span id="ahm-sites-copied" style="color:#22c55e;font-size:12px;display:none">✓ Copiado</span>
-                        <div style="font-size:11px;color:#92400e;margin-top:4px">Pégalo en el panel AHM Sites para completar el emparejamiento de este sitio.</div>
-                    </div>
-                    <?php elseif ( $ahm_sites_enabled && ! $ahm_sites_connected ) : ?>
-                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:14px">
-                        <input type="hidden" name="action" value="rmai_ahm_sites_generate_code">
-                        <?php wp_nonce_field( 'rmai_ahm_sites_generate_code_action' ); ?>
-                        <button type="submit" class="ahm-btn ahm-btn-ghost ahm-btn-sm"><span class="dashicons dashicons-update"></span> Generar nuevo código de emparejamiento</button>
-                    </form>
-                    <?php endif; ?>
-
-                    <?php if ( $ahm_sites_connected ) : ?>
-                    <div style="margin-top:16px;padding:14px 16px;border-radius:10px;background:#f0fdf4;border:1.5px solid #86efac">
-                        <div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:6px">✓ Sitio emparejado con el panel</div>
-                        <div style="font-size:12px;color:#166534">Site ID: <strong><?php echo esc_html( $ahm_sites_site_id ); ?></strong></div>
-                        <div style="font-size:12px;color:#166534;word-break:break-all">Panel: <strong><?php echo esc_html( $ahm_sites_panel_url ); ?></strong></div>
-                    </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-
-            <!-- Rotación de clave -->
-            <div class="ahm-card">
-                <div class="ahm-card-header">
-                    <div class="ahm-card-icon slate"><span class="dashicons dashicons-image-rotate"></span></div>
-                    <div class="ahm-card-title">Rotación de la clave AHM Sites</div>
-                </div>
-                <div class="ahm-card-body">
-                    <p style="font-size:12px;color:#64748b;margin:0 0 12px">El secret de esta conexión (distinto de la API Key de arriba) lo rota automáticamente <strong>el panel AHM Sites</strong>, de forma firmada, sin intervención manual aquí.</p>
-                    <button type="button" class="ahm-btn ahm-btn-ghost ahm-btn-sm" disabled title="La rotación la inicia el panel AHM Sites, no este plugin"><span class="dashicons dashicons-image-rotate"></span> Rotar clave AHM Sites</button>
-                    <div style="font-size:11px;color:#94a3b8;margin-top:8px">Este botón es informativo: la rotación se solicita siempre desde el panel.</div>
-                </div>
-            </div>
-
-        </div>
-    </div><!-- tab-ahmsites -->
-
-    </div><!-- #ahm-wrap -->
+    </div><!-- .ahmc -->
 
     <script>
-    function ahmTab(btn, id) {
-        document.querySelectorAll('.ahm-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.ahm-tab-content').forEach(t => t.classList.remove('active'));
-        btn.classList.add('active');
-        var el = document.getElementById(id);
-        if (el) el.classList.add('active');
-    }
-    function ahmCopy() {
-        var val = document.getElementById('ahm-api-key').value;
-        navigator.clipboard.writeText(val).then(function() {
-            var el = document.getElementById('ahm-copied');
-            el.style.display = 'inline';
-            setTimeout(function(){ el.style.display = 'none'; }, 2000);
-        });
-    }
-    function ahmCopyGeneric(inputId, feedbackId) {
+    function ahmcCopy(inputId, feedbackId) {
         var input = document.getElementById(inputId);
-        if (! input) return;
-        navigator.clipboard.writeText(input.value).then(function() {
+        if (!input) return;
+        var done = function () {
             var el = document.getElementById(feedbackId);
-            if (! el) return;
-            el.style.display = 'inline';
-            setTimeout(function(){ el.style.display = 'none'; }, 2000);
-        });
+            if (!el) return;
+            el.textContent = 'Copiado';
+            setTimeout(function () { el.textContent = ''; }, 2000);
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(input.value).then(done);
+        } else {
+            var type = input.type; input.type = 'text'; input.select();
+            try { document.execCommand('copy'); done(); } catch (e) {}
+            input.type = type;
+        }
+    }
+    function ahmcReveal(inputId, btn) {
+        var input = document.getElementById(inputId);
+        if (!input) return;
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        btn.setAttribute('aria-pressed', show ? 'true' : 'false');
     }
     </script>
     <?php
@@ -6222,7 +5904,7 @@ function rmai_media_upload( WP_REST_Request $request ) {
 
     if ( ! empty( $body['url'] ) ) {
         $url      = esc_url_raw( $body['url'] );
-        $filename = basename( sanitize_file_name( wp_parse_url( $url, PHP_URL_PATH ) ?: '' ) );
+        $filename = sanitize_file_name( basename( wp_parse_url( $url, PHP_URL_PATH ) ?: '' ) );
         // download_url() no acepta argumentos HTTP: el tope se inyecta solo
         // durante esta descarga. Se pide 1 byte más para distinguir "justo en
         // el tope" de "truncado por pasarse".

@@ -38,7 +38,7 @@ API REST privada para gestionar desde herramientas externas (n8n, Make, scripts 
 - Acceder sin API Key válida
 - Saltarse el rate limit por IP
 
-### Power Tools (v3.8.0-beta)
+### Power Tools (v3.8.0)
 
 Bloque **no-RCE** que amplía lo que la IA puede hacer sin introducir ejecución de código arbitrario. Todo va con la misma API Key diaria, mismo rate limit y mismo log (las escrituras dejan traza de auditoría con el recurso afectado). **Deliberadamente NO se incluye** ejecutar PHP, escribir/editar/borrar ficheros, WP-CLI, instalar plugins/temas ni enlaces de login admin: con una key única autoactualizada en toda la flota, cualquiera de esas capacidades sería RCE en todas las webs.
 
@@ -48,8 +48,18 @@ Bloque **no-RCE** que amplía lo que la IA puede hacer sin introducir ejecución
 | **Skills** | `GET/POST /skills`, `GET/PUT/DELETE /skills/{id}` — playbooks Markdown en un CPT privado (`ahm_skill`); el listado devuelve nombre + descripción para que la IA elija; incluye una skill integrada "Cómo escribir skills" |
 | **Design** | `GET/PUT/DELETE /design` — dirección de diseño global (paleta, tipografías, espaciados, tono, reglas). `GET/POST /design/elementor-kit` — colores/tipografías globales y CSS del **Kit clásico** de Elementor. `POST /design/elementor-regenerate-css` — regenera el CSS global |
 | **Elementor clásico** | `POST /post/{id}/elementor-section` — inserta secciones (hero, features, pricing, FAQ…) en una posición dada, reutilizando la escritura segura con verificación de nodos y reversión; limpia el CSS del post |
-| **Medios** | `POST /media/upload` — sube un medio por URL o base64 con `media_handle_sideload` (solo medios; nada de plugins/temas ni ZIP ejecutable) |
-| **Ficheros (SOLO LECTURA)** | `GET /files/list`, `GET /files/tree`, `GET /files/read`, `GET /files/search` — explorar y leer bajo `ABSPATH` (rutas resueltas con `realpath()`); sin escribir, borrar ni pausar |
+| **Medios** | `POST /media/upload` — sube un medio por URL o base64 con `media_handle_sideload` (solo tipos de medio permitidos por WordPress; nada de plugins/temas ni ZIP ejecutable). Tope `RMAI_MEDIA_MAX_MB` (20 MB por defecto, configurable en `wp-config.php`) |
+| **Ficheros (SOLO LECTURA)** | `GET /files/list`, `GET /files/tree`, `GET /files/read`, `GET /files/search` — explorar y leer bajo `ABSPATH` (rutas resueltas con `realpath()`); sin escribir, borrar ni pausar. **Nunca** enseña ni lee `wp-config*`, `.env*`, `.htpasswd`, `.htaccess`, `.user.ini`, claves, volcados SQL, logs, copias, comprimidos ni carpetas de backups (`updraft`, `ai1wm-backups`…), `.git` o `.ssh` |
+
+**Grupos activables por web** (Ajustes → AHM Connect → Seguridad y límites, o filtro `rmai_route_groups`):
+
+- **Power Tools** (Gutenberg, Skills, Design, Elementor clásico, subida de medios): **activo** por defecto.
+- **Ficheros** (`/files/*`): **desactivado** por defecto. Es lo único que expone código y configuración de la web con solo la API Key, así que se enciende a propósito en las webs que lo necesiten.
+
+```php
+// mu-plugin o plugin envoltorio: forzar un grupo
+add_filter( 'rmai_route_groups', fn( $g ) => array_merge( $g, [ 'files' => true ] ) );
+```
 
 ---
 
@@ -73,6 +83,13 @@ de cada 12 h, usa el enlace **"Buscar actualizaciones"** en la fila del plugin.
 Las webs que estén en una versión anterior a la 3.6.0 no llevan ese mecanismo:
 hay que subirles `dist/ahm-connect.zip` una vez a mano. Ver [RELEASING.md](RELEASING.md).
 
+Para que una web **no** se actualice desde este repositorio (por ejemplo un
+paquete que se actualiza a mano), define en `wp-config.php`:
+
+```php
+define( 'RMAI_DISABLE_UPDATES', true );
+```
+
 ---
 
 ## 3. Activación y seguridad
@@ -85,9 +102,10 @@ hay que subirles `dist/ahm-connect.zip` una vez a mano. Ver [RELEASING.md](RELEA
 - Debe enviarse en la cabecera HTTP: `X-RMAI-Key: <clave>`
 
 ### Rate limit
-- Máximo 60 peticiones por minuto por IP
+- 60 peticiones por minuto por IP por defecto, en ventana fija de 60 s
+- Se cambia en el panel (1-1000) o fijándolo en `wp-config.php` con `define( 'RMAI_RATE_LIMIT', 120 );` (manda sobre el panel)
 - Se puede desactivar desde el panel de ajustes
-- IPs bloqueadas reciben error HTTP 429
+- Al pasarse se recibe HTTP 429 con `retry_after` (segundos hasta que se vacía la ventana)
 
 ### Whitelist de IPs
 - Campo en ajustes para restringir acceso a IPs concretas
@@ -106,7 +124,7 @@ Acceso: **WordPress Admin → Ajustes → AHM Connect**
 
 - **API Key:** clave actual, botón para regenerar
 - **Info del sitio:** versiones de WordPress, PHP, Rank Math, WooCommerce
-- **Ajustes:** rate limit on/off, log de accesos on/off, whitelist de IPs
+- **Ajustes:** rate limit on/off y peticiones por minuto, log de accesos on/off, whitelist de IPs, grupos Power Tools y Ficheros
 - **Endpoints:** tabla de referencia de todas las rutas disponibles
 - **Log de peticiones:** últimas 100 peticiones, con opción de borrar
 - **AHM Sites:** toggle para vincular el sitio al panel AHM-Sites por código de un solo uso (opcional, independiente de la API Key general)

@@ -20,7 +20,16 @@ define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );
 define( 'RMAI_NAMESPACE',       'ahm-connect/v1' );
-define( 'RMAI_RATE_LIMIT',      60 );
+// Límite de peticiones por IP y minuto. Si se define en wp-config.php manda
+// sobre el panel (el campo sale bloqueado); si no, 60 por defecto y se
+// cambia en Ajustes → AHM Connect → Seguridad y límites.
+if ( defined( 'RMAI_RATE_LIMIT' ) ) {
+    define( 'RMAI_RATE_LIMIT_LOCKED', true );
+} else {
+    define( 'RMAI_RATE_LIMIT', 60 );
+    define( 'RMAI_RATE_LIMIT_LOCKED', false );
+}
+define( 'RMAI_RATE_LIMIT_MAX',  1000 );
 define( 'RMAI_LOG_OPTION',      'rmai_request_log' );
 define( 'RMAI_LOG_MAX',         100 );
 
@@ -83,9 +92,54 @@ function rmai_generate_key(): string {
 function rmai_default_settings(): array {
     return [
         'rate_limit_enabled' => true,
+        'rate_limit'         => (int) RMAI_RATE_LIMIT,
         'log_enabled'        => true,
         'ip_whitelist'       => '',
+        // Grupos de rutas (v3.8.0). Power Tools activo; Ficheros (lectura de
+        // ficheros del servidor) desactivado por defecto: con la clave de la
+        // API basta para usarlo y es lo único que expone código y
+        // configuración de la web, así que se enciende a propósito y por web.
+        'group_power'        => true,
+        'group_files'        => false,
     ];
+}
+
+/**
+ * Grupos de rutas que se pueden apagar por web:
+ *   power → Gutenberg, Skills, Design, Elementor clásico (insertar sección) y /media/upload
+ *   files → /files/list, /files/tree, /files/read, /files/search (solo lectura)
+ * Se decide con el ajuste del panel y, por encima, con el filtro
+ * 'rmai_route_groups' (p. ej. desde un mu-plugin o un plugin envoltorio):
+ *     add_filter( 'rmai_route_groups', fn( $g ) => array_merge( $g, [ 'files' => true ] ) );
+ */
+function rmai_route_groups(): array {
+    $settings = wp_parse_args( get_option( RMAI_OPTION_SETTINGS, [] ), rmai_default_settings() );
+    $groups   = [
+        'power' => (bool) $settings['group_power'],
+        'files' => (bool) $settings['group_files'],
+    ];
+    $filtered = apply_filters( 'rmai_route_groups', $groups );
+    foreach ( array_keys( $groups ) as $g ) {
+        if ( is_array( $filtered ) && array_key_exists( $g, $filtered ) ) {
+            $groups[ $g ] = (bool) $filtered[ $g ];
+        }
+    }
+    return $groups;
+}
+
+function rmai_route_group_enabled( string $group ): bool {
+    $groups = rmai_route_groups();
+    return ! empty( $groups[ $group ] );
+}
+
+/** Límite efectivo de peticiones por minuto e IP. */
+function rmai_rate_limit(): int {
+    if ( RMAI_RATE_LIMIT_LOCKED ) {
+        return max( 1, (int) RMAI_RATE_LIMIT );
+    }
+    $settings = wp_parse_args( get_option( RMAI_OPTION_SETTINGS, [] ), rmai_default_settings() );
+    $limit    = (int) $settings['rate_limit'];
+    return $limit > 0 ? min( $limit, RMAI_RATE_LIMIT_MAX ) : (int) RMAI_RATE_LIMIT;
 }
 
 // ── Inyectar JSON-LD personalizado (FAQPage, BreadcrumbList, etc.) ────────
@@ -251,10 +305,15 @@ function rmai_handle_admin_actions(): void {
         check_admin_referer( 'rmai_save_settings_action' ) &&
         current_user_can( 'manage_options' )
     ) {
+        $current  = wp_parse_args( get_option( RMAI_OPTION_SETTINGS, [] ), rmai_default_settings() );
+        $limit    = isset( $_POST['rate_limit'] ) ? absint( $_POST['rate_limit'] ) : (int) $current['rate_limit'];
         $settings = [
             'rate_limit_enabled' => isset( $_POST['rate_limit_enabled'] ),
+            'rate_limit'         => max( 1, min( RMAI_RATE_LIMIT_MAX, $limit ?: (int) RMAI_RATE_LIMIT ) ),
             'log_enabled'        => isset( $_POST['log_enabled'] ),
             'ip_whitelist'       => sanitize_text_field( $_POST['ip_whitelist'] ?? '' ),
+            'group_power'        => isset( $_POST['group_power'] ),
+            'group_files'        => isset( $_POST['group_files'] ),
         ];
         update_option( RMAI_OPTION_SETTINGS, $settings );
         wp_safe_redirect( admin_url( 'options-general.php?page=ahm-connect&rmai_msg=settings_saved' ) );
@@ -564,10 +623,42 @@ function rmai_settings_page(): void {
                         <div class="ahm-toggle-row">
                             <div>
                                 <div class="ahm-toggle-label">Límite de peticiones</div>
-                                <div class="ahm-toggle-desc">Máx. <?php echo esc_html( RMAI_RATE_LIMIT ); ?> peticiones/minuto por IP</div>
+                                <div class="ahm-toggle-desc">Máx. <?php echo esc_html( rmai_rate_limit() ); ?> peticiones/minuto por IP (ventana fija de 60 s)</div>
                             </div>
                             <label class="ahm-switch">
                                 <input type="checkbox" name="rate_limit_enabled" <?php checked( $settings['rate_limit_enabled'] ); ?>>
+                                <span class="ahm-slider"></span>
+                            </label>
+                        </div>
+
+                        <div style="margin-top:4px;margin-bottom:8px">
+                            <div class="ahm-toggle-label" style="margin-bottom:4px">Peticiones por minuto</div>
+                            <?php if ( RMAI_RATE_LIMIT_LOCKED ) : ?>
+                                <div class="ahm-toggle-desc">Fijado en <code>wp-config.php</code> (RMAI_RATE_LIMIT = <?php echo esc_html( (int) RMAI_RATE_LIMIT ); ?>).</div>
+                            <?php else : ?>
+                                <input type="number" name="rate_limit" class="ahm-input" min="1" max="<?php echo esc_attr( RMAI_RATE_LIMIT_MAX ); ?>" value="<?php echo esc_attr( rmai_rate_limit() ); ?>" style="max-width:120px">
+                            <?php endif; ?>
+                        </div>
+
+                        <?php $rmai_groups = rmai_route_groups(); ?>
+                        <div class="ahm-toggle-row">
+                            <div>
+                                <div class="ahm-toggle-label">Power Tools</div>
+                                <div class="ahm-toggle-desc">Gutenberg, Skills, Design, insertar secciones Elementor y subir medios<?php echo $rmai_groups['power'] !== (bool) $settings['group_power'] ? ' · <strong>forzado por código (filtro rmai_route_groups)</strong>' : ''; ?></div>
+                            </div>
+                            <label class="ahm-switch">
+                                <input type="checkbox" name="group_power" <?php checked( $settings['group_power'] ); ?>>
+                                <span class="ahm-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="ahm-toggle-row">
+                            <div>
+                                <div class="ahm-toggle-label">Ficheros (solo lectura)</div>
+                                <div class="ahm-toggle-desc">/files/*: listar y leer ficheros de la web. Desactivado por defecto; actívalo solo donde haga falta<?php echo $rmai_groups['files'] !== (bool) $settings['group_files'] ? ' · <strong>forzado por código (filtro rmai_route_groups)</strong>' : ''; ?></div>
+                            </div>
+                            <label class="ahm-switch">
+                                <input type="checkbox" name="group_files" <?php checked( $settings['group_files'] ); ?>>
                                 <span class="ahm-slider"></span>
                             </label>
                         </div>
@@ -744,7 +835,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group">🧱 Gutenberg <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-block-default"></span> Gutenberg <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
                     <?php
                     $endpoints9 = [
                         ['GET',   '/gutenberg/blocks',        'Listar bloques registrados'],
@@ -760,7 +851,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group">📚 Skills <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-book"></span> Skills <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
                     <?php
                     $endpoints10 = [
                         ['GET',    '/skills',       'Listar skills con descripción'],
@@ -777,7 +868,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid;margin-bottom:16px">
-                    <div class="ahm-ep-group">🎨 Design <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-art"></span> Design <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
                     <?php
                     $endpoints11 = [
                         ['GET',    '/design',                          'Leer dirección de diseño global'],
@@ -795,7 +886,7 @@ function rmai_settings_page(): void {
                 </div>
 
                 <div class="ahm-ep-section" style="break-inside:avoid">
-                    <div class="ahm-ep-group">⚡ Power Tools <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
+                    <div class="ahm-ep-group"><span class="dashicons dashicons-superhero"></span> Power Tools <span style="font-size:10px;color:#8b5cf6">v3.8</span></div>
                     <?php
                     $endpoints12 = [
                         ['POST',  '/post/{id}/elementor-section', 'Insertar sección Elementor clásico'],
@@ -1533,13 +1624,23 @@ function rmai_check_permission( WP_REST_Request $request ) {
     }
 
     if ( $settings['rate_limit_enabled'] ) {
+        // Ventana fija de 60 s: se guarda cuándo empezó y cuántas van. La
+        // caducidad se fija a lo que le queda a la ventana (antes se renovaba
+        // en cada petición y el contador no se vaciaba nunca con tráfico
+        // espaciado: 1 petición cada 30 s acababa en 429 a la media hora).
         $transient = 'rmai_rl_' . md5( $ip );
-        $count     = (int) get_transient( $transient );
-        if ( $count >= RMAI_RATE_LIMIT ) {
-            rmai_log( $request, 429, $ip );
-            return new WP_Error( 'rmai_rate_limit', 'Demasiadas peticiones. Espera un minuto.', [ 'status' => 429 ] );
+        $now       = time();
+        $window    = get_transient( $transient );
+        if ( ! is_array( $window ) || ! isset( $window['start'], $window['count'] ) || $now - (int) $window['start'] >= 60 ) {
+            $window = [ 'start' => $now, 'count' => 0 ];
         }
-        set_transient( $transient, $count + 1, 60 );
+        if ( (int) $window['count'] >= rmai_rate_limit() ) {
+            $retry = max( 1, 60 - ( $now - (int) $window['start'] ) );
+            rmai_log( $request, 429, $ip );
+            return new WP_Error( 'rmai_rate_limit', 'Demasiadas peticiones. Reintenta en ' . $retry . ' s.', [ 'status' => 429, 'retry_after' => $retry ] );
+        }
+        $window['count'] = (int) $window['count'] + 1;
+        set_transient( $transient, $window, max( 1, 60 - ( $now - (int) $window['start'] ) ) );
     }
 
     rmai_no_cache();
@@ -1909,6 +2010,8 @@ function rmai_get_site_info() {
         'elementor'      => defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : null,
         'plugin_version' => RMAI_VERSION,
         'post_types'     => array_keys( get_post_types( [ 'public' => true ] ) ),
+        'route_groups'   => rmai_route_groups(),
+        'rate_limit'     => rmai_rate_limit(),
     ], 200 );
 }
 
@@ -5402,7 +5505,15 @@ function rmai_power_audit( string $route, string $detail, int $status ): void {
 // ── Registro de rutas power-tools ────────────────────────────────────────────
 add_action( 'rest_api_init', 'rmai_register_power_routes' );
 function rmai_register_power_routes(): void {
-    $perm = 'rmai_check_permission';
+    $perm   = 'rmai_check_permission';
+    $groups = rmai_route_groups();
+
+    if ( $groups['files'] ) {
+        rmai_register_files_routes( $perm );
+    }
+    if ( ! $groups['power'] ) {
+        return;
+    }
 
     // Gutenberg
     register_rest_route( RMAI_NAMESPACE, '/gutenberg/blocks', [
@@ -5507,7 +5618,10 @@ function rmai_register_power_routes(): void {
         'permission_callback' => $perm,
     ] );
 
-    // Ficheros — SOLO LECTURA
+}
+
+/** Rutas del grupo "files" (solo lectura). Solo se registran si el grupo está activo. */
+function rmai_register_files_routes( string $perm ): void {
     register_rest_route( RMAI_NAMESPACE, '/files/list', [
         'methods'             => WP_REST_Server::READABLE,
         'callback'            => 'rmai_files_list',
@@ -6567,7 +6681,9 @@ function rmai_cache_route_excluded( string $route ): bool {
         return true; // no es de este plugin
     }
     $rel = substr( $route, strlen( $prefix ) );
-    return 0 === strpos( $rel, '/tools/' ) || 0 === strpos( $rel, '/ahm-sites/' );
+    // /skills/* escribe en un CPT privado que no se pinta en la web: purgar
+    // LiteSpeed/Elementor por eso solo gastaría tiempo.
+    return 0 === strpos( $rel, '/tools/' ) || 0 === strpos( $rel, '/ahm-sites/' ) || 0 === strpos( $rel, '/skills' );
 }
 
 add_filter( 'rest_request_before_callbacks', 'rmai_cache_begin_tracking', 10, 3 );
@@ -6983,169 +7099,180 @@ function rmai_tool_flush_cache( WP_REST_Request $request ) {
 // La URL del manifiesto se puede sobreescribir por sitio definiendo
 // RMAI_UPDATE_MANIFEST en wp-config.php (útil para probar en staging).
 
-if ( ! defined( 'RMAI_UPDATE_MANIFEST' ) ) {
-    define( 'RMAI_UPDATE_MANIFEST', 'https://raw.githubusercontent.com/aquihaydesarrollo/AHM-connect/main/ahm-connect.json' );
-}
+// Las webs que no deben actualizarse desde este repositorio (p. ej. el
+// paquete AHM Connect Heleo, que se actualiza a mano) definen en
+// wp-config.php o en su cargador, ANTES de cargar este archivo:
+//     define( 'RMAI_DISABLE_UPDATES', true );
+// y toda esta sección queda sin registrar: ni consulta el manifiesto ni
+// ofrece actualizaciones.
 
-define( 'RMAI_UPDATE_TRANSIENT', 'rmai_update_manifest' );
-define( 'RMAI_UPDATE_TTL',       12 * HOUR_IN_SECONDS );
+if ( ! defined( 'RMAI_DISABLE_UPDATES' ) || ! RMAI_DISABLE_UPDATES ) {
 
-/**
- * Descarga el manifiesto remoto, cacheado para no consultar en cada carga.
- *
- * @param bool $force Ignora la caché (lo usa el enlace "Buscar actualizaciones").
- * @return array|null Manifiesto decodificado, o null si no se pudo obtener.
- */
-function rmai_fetch_manifest( bool $force = false ): ?array {
-    if ( ! $force ) {
-        $cached = get_site_transient( RMAI_UPDATE_TRANSIENT );
-        if ( is_array( $cached ) ) {
-            return $cached;
+    if ( ! defined( 'RMAI_UPDATE_MANIFEST' ) ) {
+        define( 'RMAI_UPDATE_MANIFEST', 'https://raw.githubusercontent.com/aquihaydesarrollo/AHM-connect/main/ahm-connect.json' );
+    }
+
+    define( 'RMAI_UPDATE_TRANSIENT', 'rmai_update_manifest' );
+    define( 'RMAI_UPDATE_TTL',       12 * HOUR_IN_SECONDS );
+
+    /**
+     * Descarga el manifiesto remoto, cacheado para no consultar en cada carga.
+     *
+     * @param bool $force Ignora la caché (lo usa el enlace "Buscar actualizaciones").
+     * @return array|null Manifiesto decodificado, o null si no se pudo obtener.
+     */
+    function rmai_fetch_manifest( bool $force = false ): ?array {
+        if ( ! $force ) {
+            $cached = get_site_transient( RMAI_UPDATE_TRANSIENT );
+            if ( is_array( $cached ) ) {
+                return $cached;
+            }
+            // Un fallo se cachea en corto para no reintentar en cada pantalla.
+            if ( 'error' === $cached ) {
+                return null;
+            }
         }
-        // Un fallo se cachea en corto para no reintentar en cada pantalla.
-        if ( 'error' === $cached ) {
+
+        $response = wp_remote_get( RMAI_UPDATE_MANIFEST, [
+            'timeout' => 10,
+            'headers' => [ 'Accept' => 'application/json' ],
+        ] );
+
+        if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+            set_site_transient( RMAI_UPDATE_TRANSIENT, 'error', HOUR_IN_SECONDS );
             return null;
         }
+
+        $data = json_decode( wp_remote_retrieve_body( $response ), true );
+        if ( ! is_array( $data ) || empty( $data['version'] ) || empty( $data['download_url'] ) ) {
+            set_site_transient( RMAI_UPDATE_TRANSIENT, 'error', HOUR_IN_SECONDS );
+            return null;
+        }
+
+        set_site_transient( RMAI_UPDATE_TRANSIENT, $data, RMAI_UPDATE_TTL );
+        return $data;
     }
 
-    $response = wp_remote_get( RMAI_UPDATE_MANIFEST, [
-        'timeout' => 10,
-        'headers' => [ 'Accept' => 'application/json' ],
-    ] );
+    /** Anuncia la actualización disponible en la pantalla de Plugins. */
+    add_filter( 'pre_set_site_transient_update_plugins', function ( $transient ) {
+        if ( ! is_object( $transient ) ) {
+            return $transient;
+        }
 
-    if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
-        set_site_transient( RMAI_UPDATE_TRANSIENT, 'error', HOUR_IN_SECONDS );
-        return null;
-    }
+        $manifest = rmai_fetch_manifest();
+        if ( ! $manifest ) {
+            return $transient;
+        }
 
-    $data = json_decode( wp_remote_retrieve_body( $response ), true );
-    if ( ! is_array( $data ) || empty( $data['version'] ) || empty( $data['download_url'] ) ) {
-        set_site_transient( RMAI_UPDATE_TRANSIENT, 'error', HOUR_IN_SECONDS );
-        return null;
-    }
+        $basename = plugin_basename( __FILE__ );
+        $item     = (object) [
+            'id'            => 'ahm-connect',
+            'slug'          => 'ahm-connect',
+            'plugin'        => $basename,
+            'new_version'   => $manifest['version'],
+            'url'           => $manifest['homepage'] ?? '',
+            'package'       => $manifest['download_url'],
+            'requires'      => $manifest['requires'] ?? '',
+            'requires_php'  => $manifest['requires_php'] ?? '',
+            'tested'        => $manifest['tested'] ?? '',
+            'icons'         => $manifest['icons'] ?? [],
+        ];
 
-    set_site_transient( RMAI_UPDATE_TRANSIENT, $data, RMAI_UPDATE_TTL );
-    return $data;
-}
+        if ( version_compare( $manifest['version'], RMAI_VERSION, '>' ) ) {
+            $transient->response[ $basename ] = $item;
+            unset( $transient->no_update[ $basename ] );
+        } else {
+            // Sin esto WordPress marca el plugin como "sin información de actualización".
+            unset( $transient->response[ $basename ] );
+            $transient->no_update[ $basename ] = $item;
+        }
 
-/** Anuncia la actualización disponible en la pantalla de Plugins. */
-add_filter( 'pre_set_site_transient_update_plugins', function ( $transient ) {
-    if ( ! is_object( $transient ) ) {
         return $transient;
-    }
+    } );
 
-    $manifest = rmai_fetch_manifest();
-    if ( ! $manifest ) {
-        return $transient;
-    }
+    /** Rellena la ficha "Ver detalles de la versión". */
+    add_filter( 'plugins_api', function ( $result, $action, $args ) {
+        if ( 'plugin_information' !== $action || empty( $args->slug ) || 'ahm-connect' !== $args->slug ) {
+            return $result;
+        }
 
-    $basename = plugin_basename( __FILE__ );
-    $item     = (object) [
-        'id'            => 'ahm-connect',
-        'slug'          => 'ahm-connect',
-        'plugin'        => $basename,
-        'new_version'   => $manifest['version'],
-        'url'           => $manifest['homepage'] ?? '',
-        'package'       => $manifest['download_url'],
-        'requires'      => $manifest['requires'] ?? '',
-        'requires_php'  => $manifest['requires_php'] ?? '',
-        'tested'        => $manifest['tested'] ?? '',
-        'icons'         => $manifest['icons'] ?? [],
-    ];
+        $manifest = rmai_fetch_manifest();
+        if ( ! $manifest ) {
+            return $result;
+        }
 
-    if ( version_compare( $manifest['version'], RMAI_VERSION, '>' ) ) {
-        $transient->response[ $basename ] = $item;
-        unset( $transient->no_update[ $basename ] );
-    } else {
-        // Sin esto WordPress marca el plugin como "sin información de actualización".
-        unset( $transient->response[ $basename ] );
-        $transient->no_update[ $basename ] = $item;
-    }
+        return (object) [
+            'name'          => $manifest['name'] ?? 'AHM Connect',
+            'slug'          => 'ahm-connect',
+            'version'       => $manifest['version'],
+            'author'        => $manifest['author'] ?? '',
+            'homepage'      => $manifest['homepage'] ?? '',
+            'requires'      => $manifest['requires'] ?? '',
+            'requires_php'  => $manifest['requires_php'] ?? '',
+            'tested'        => $manifest['tested'] ?? '',
+            'last_updated'  => $manifest['last_updated'] ?? '',
+            'download_link' => $manifest['download_url'],
+            'sections'      => $manifest['sections'] ?? [],
+            'banners'       => $manifest['banners'] ?? [],
+        ];
+    }, 10, 3 );
 
-    return $transient;
-} );
+    /**
+     * El zip de una release de GitHub se descomprime en una carpeta con el nombre
+     * del tag (ahm-connect-3.6.0). WordPress necesita que se llame igual que la
+     * carpeta instalada o crearía un plugin duplicado en vez de actualizar.
+     */
+    add_filter( 'upgrader_source_selection', function ( $source, $remote_source, $upgrader, $args = [] ) {
+        if ( empty( $args['plugin'] ) || plugin_basename( __FILE__ ) !== $args['plugin'] ) {
+            return $source;
+        }
 
-/** Rellena la ficha "Ver detalles de la versión". */
-add_filter( 'plugins_api', function ( $result, $action, $args ) {
-    if ( 'plugin_information' !== $action || empty( $args->slug ) || 'ahm-connect' !== $args->slug ) {
-        return $result;
-    }
+        $expected = trailingslashit( $remote_source ) . 'ahm-connect';
+        if ( untrailingslashit( $source ) === $expected ) {
+            return $source;
+        }
 
-    $manifest = rmai_fetch_manifest();
-    if ( ! $manifest ) {
-        return $result;
-    }
+        global $wp_filesystem;
+        if ( $wp_filesystem && $wp_filesystem->move( $source, $expected ) ) {
+            return trailingslashit( $expected );
+        }
 
-    return (object) [
-        'name'          => $manifest['name'] ?? 'AHM Connect',
-        'slug'          => 'ahm-connect',
-        'version'       => $manifest['version'],
-        'author'        => $manifest['author'] ?? '',
-        'homepage'      => $manifest['homepage'] ?? '',
-        'requires'      => $manifest['requires'] ?? '',
-        'requires_php'  => $manifest['requires_php'] ?? '',
-        'tested'        => $manifest['tested'] ?? '',
-        'last_updated'  => $manifest['last_updated'] ?? '',
-        'download_link' => $manifest['download_url'],
-        'sections'      => $manifest['sections'] ?? [],
-        'banners'       => $manifest['banners'] ?? [],
-    ];
-}, 10, 3 );
-
-/**
- * El zip de una release de GitHub se descomprime en una carpeta con el nombre
- * del tag (ahm-connect-3.6.0). WordPress necesita que se llame igual que la
- * carpeta instalada o crearía un plugin duplicado en vez de actualizar.
- */
-add_filter( 'upgrader_source_selection', function ( $source, $remote_source, $upgrader, $args = [] ) {
-    if ( empty( $args['plugin'] ) || plugin_basename( __FILE__ ) !== $args['plugin'] ) {
         return $source;
-    }
+    }, 10, 4 );
 
-    $expected = trailingslashit( $remote_source ) . 'ahm-connect';
-    if ( untrailingslashit( $source ) === $expected ) {
-        return $source;
-    }
+    /** Tras actualizar, tira la caché del manifiesto para no ofrecer la misma versión. */
+    add_action( 'upgrader_process_complete', function ( $upgrader, $options ) {
+        if ( 'update' === ( $options['action'] ?? '' ) && 'plugin' === ( $options['type'] ?? '' ) ) {
+            delete_site_transient( RMAI_UPDATE_TRANSIENT );
+        }
+    }, 10, 2 );
 
-    global $wp_filesystem;
-    if ( $wp_filesystem && $wp_filesystem->move( $source, $expected ) ) {
-        return trailingslashit( $expected );
-    }
+    /** Enlace "Buscar actualizaciones" en la fila del plugin. */
+    add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), function ( $links ) {
+        $url = wp_nonce_url(
+            add_query_arg( 'rmai_check_update', '1', admin_url( 'plugins.php' ) ),
+            'rmai_check_update'
+        );
+        $links[] = '<a href="' . esc_url( $url ) . '">Buscar actualizaciones</a>';
+        return $links;
+    } );
 
-    return $source;
-}, 10, 4 );
+    add_action( 'admin_init', function () {
+        if ( empty( $_GET['rmai_check_update'] ) || ! current_user_can( 'update_plugins' ) ) {
+            return;
+        }
+        check_admin_referer( 'rmai_check_update' );
 
-/** Tras actualizar, tira la caché del manifiesto para no ofrecer la misma versión. */
-add_action( 'upgrader_process_complete', function ( $upgrader, $options ) {
-    if ( 'update' === ( $options['action'] ?? '' ) && 'plugin' === ( $options['type'] ?? '' ) ) {
         delete_site_transient( RMAI_UPDATE_TRANSIENT );
-    }
-}, 10, 2 );
+        rmai_fetch_manifest( true );
+        delete_site_transient( 'update_plugins' );
+        wp_update_plugins();
 
-/** Enlace "Buscar actualizaciones" en la fila del plugin. */
-add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), function ( $links ) {
-    $url = wp_nonce_url(
-        add_query_arg( 'rmai_check_update', '1', admin_url( 'plugins.php' ) ),
-        'rmai_check_update'
-    );
-    $links[] = '<a href="' . esc_url( $url ) . '">Buscar actualizaciones</a>';
-    return $links;
-} );
+        wp_safe_redirect( admin_url( 'plugins.php' ) );
+        exit;
+    } );
 
-add_action( 'admin_init', function () {
-    if ( empty( $_GET['rmai_check_update'] ) || ! current_user_can( 'update_plugins' ) ) {
-        return;
-    }
-    check_admin_referer( 'rmai_check_update' );
-
-    delete_site_transient( RMAI_UPDATE_TRANSIENT );
-    rmai_fetch_manifest( true );
-    delete_site_transient( 'update_plugins' );
-    wp_update_plugins();
-
-    wp_safe_redirect( admin_url( 'plugins.php' ) );
-    exit;
-} );
+} // fin RMAI_DISABLE_UPDATES
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 19. AHM SITES — CONEXIÓN CON EL PANEL (v3.7.0)

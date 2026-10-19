@@ -40,6 +40,9 @@ define( 'RMAI_OPTION_SKILL_SEED',  'rmai_skill_builtin_seed' ); // flag: skill i
 define( 'RMAI_FILES_READ_MAX',     1048576 );                  // 1 MB: tope de lectura de un fichero
 define( 'RMAI_FILES_SCAN_MAX',     524288 );                   // 512 KB: tope para buscar dentro de un fichero
 define( 'RMAI_FILES_NODE_MAX',     3000 );                     // tope de nodos en /files/tree y /files/search
+if ( ! defined( 'RMAI_MEDIA_MAX_MB' ) ) {
+    define( 'RMAI_MEDIA_MAX_MB',   20 );                       // tope de /media/upload (MB); se puede bajar/subir en wp-config.php
+}
 
 // ═══════════════════════════════════════════════════════
 // 1. ACTIVACIÓN / DESACTIVACIÓN / DESINSTALACIÓN
@@ -6097,34 +6100,62 @@ function rmai_media_upload( WP_REST_Request $request ) {
     require_once ABSPATH . 'wp-admin/includes/media.php';
     require_once ABSPATH . 'wp-admin/includes/image.php';
 
-    $body     = $request->get_json_params();
+    $body      = $request->get_json_params();
     $tmp       = null;
     $filename  = '';
     $cleanup   = null;
+    $max_bytes = (int) RMAI_MEDIA_MAX_MB * 1048576;
 
     if ( ! empty( $body['url'] ) ) {
         $url      = esc_url_raw( $body['url'] );
         $filename = basename( sanitize_file_name( wp_parse_url( $url, PHP_URL_PATH ) ?: '' ) );
-        $tmp      = download_url( $url, 60 );
+        // download_url() no acepta argumentos HTTP: el tope se inyecta solo
+        // durante esta descarga. Se pide 1 byte más para distinguir "justo en
+        // el tope" de "truncado por pasarse".
+        $limit_cb = static function ( $args ) use ( $max_bytes ) {
+            $args['limit_response_size'] = $max_bytes + 1;
+            return $args;
+        };
+        add_filter( 'http_request_args', $limit_cb, 99 );
+        $tmp = download_url( $url, 60 );
+        remove_filter( 'http_request_args', $limit_cb, 99 );
         if ( is_wp_error( $tmp ) ) {
             return new WP_Error( 'rmai_download_failed', $tmp->get_error_message(), [ 'status' => 400 ] );
         }
         $cleanup = $tmp;
+        if ( (int) @filesize( $tmp ) > $max_bytes ) {
+            @unlink( $tmp );
+            return new WP_Error( 'rmai_too_large', 'El fichero supera el tope de ' . RMAI_MEDIA_MAX_MB . ' MB.', [ 'status' => 413 ] );
+        }
     } elseif ( ! empty( $body['base64'] ) ) {
         $filename = sanitize_file_name( $body['filename'] ?? '' );
         if ( '' === $filename ) {
             return new WP_Error( 'rmai_missing', 'Con base64 hay que incluir {filename}.', [ 'status' => 400 ] );
         }
-        $raw = base64_decode( (string) $body['base64'], true );
+        $b64 = (string) $body['base64'];
+        // Se comprueba el tamaño ANTES de decodificar: 4 caracteres base64 = 3 bytes.
+        if ( strlen( $b64 ) > (int) ceil( $max_bytes / 3 ) * 4 + 4 ) {
+            return new WP_Error( 'rmai_too_large', 'El fichero supera el tope de ' . RMAI_MEDIA_MAX_MB . ' MB.', [ 'status' => 413 ] );
+        }
+        $raw = base64_decode( $b64, true );
+        unset( $b64 );
         if ( false === $raw ) {
             return new WP_Error( 'rmai_bad_base64', 'base64 no válido.', [ 'status' => 400 ] );
+        }
+        if ( strlen( $raw ) > $max_bytes ) {
+            return new WP_Error( 'rmai_too_large', 'El fichero supera el tope de ' . RMAI_MEDIA_MAX_MB . ' MB.', [ 'status' => 413 ] );
         }
         $tmp = wp_tempnam( $filename );
         if ( ! $tmp ) {
             return new WP_Error( 'rmai_tmp_failed', 'No se pudo crear el fichero temporal.', [ 'status' => 500 ] );
         }
-        file_put_contents( $tmp, $raw );
+        $written = file_put_contents( $tmp, $raw );
         $cleanup = $tmp;
+        if ( strlen( $raw ) !== $written ) {
+            @unlink( $tmp );
+            return new WP_Error( 'rmai_tmp_failed', 'No se pudo escribir el fichero temporal (¿disco lleno?).', [ 'status' => 500 ] );
+        }
+        unset( $raw );
     } else {
         return new WP_Error( 'rmai_missing', 'Incluye {url} o {base64, filename}.', [ 'status' => 400 ] );
     }
@@ -6194,6 +6225,34 @@ function rmai_files_resolve( string $input ) {
     return $real;
 }
 
+/**
+ * Ficheros y carpetas que /files/* nunca enseña ni lee: credenciales
+ * (wp-config, .env, .htpasswd, claves), configuración del servidor
+ * (.htaccess, .user.ini, php.ini), volcados SQL, logs, copias y
+ * comprimidos, carpetas de copias de seguridad y repositorios git.
+ * Se evalúa SIEMPRE sobre la ruta ya resuelta con realpath() y relativa a
+ * ABSPATH, para que ni enlaces simbólicos ni "../" la esquiven.
+ *
+ * Se puede AMPLIAR con el filtro 'rmai_files_blocked' (devolver true para
+ * bloquear algo más); el filtro no puede desbloquear lo de la lista base.
+ *     add_filter( 'rmai_files_blocked', fn( $b, $rel ) => $b || 0 === strpos( $rel, 'privado/' ), 10, 2 );
+ */
+function rmai_files_blocked( string $rel ): bool {
+    $rel     = ltrim( str_replace( '\\', '/', $rel ), '/' );
+    $blocked = (bool) preg_match(
+        '#(^|/)(wp-config[^/]*|\.env[^/]*|\.htpasswd|\.htaccess|\.user\.ini|php\.ini'
+        . '|[^/]*\.(sql|sql\.gz|log|bak|old|orig|save|swp|key|pem|p12|pfx|zip|tar|gz|tgz|bz2|7z|rar|wpress))$'
+        . '|(^|/)(updraft|ai1wm-backups|backwpup[^/]*|wpvivid[^/]*|backups?|\.git|\.ssh)(/|$)#i',
+        $rel
+    );
+    return $blocked || (bool) apply_filters( 'rmai_files_blocked', false, $rel );
+}
+
+/** Error estándar para una ruta protegida. */
+function rmai_files_blocked_error(): WP_Error {
+    return new WP_Error( 'rmai_path_blocked', 'Ruta protegida: no se puede consultar por la API.', [ 'status' => 403 ] );
+}
+
 /** Convierte una ruta absoluta a relativa respecto a ABSPATH (para respuestas). */
 function rmai_files_relpath( string $abs ): string {
     $base = realpath( ABSPATH );
@@ -6224,17 +6283,27 @@ function rmai_files_list( WP_REST_Request $request ) {
     if ( ! is_dir( $dir ) ) {
         return new WP_Error( 'rmai_not_dir', 'La ruta no es un directorio.', [ 'status' => 400 ] );
     }
+    if ( rmai_files_blocked( rmai_files_relpath( $dir ) ) ) {
+        return rmai_files_blocked_error();
+    }
     $entries = [];
-    foreach ( scandir( $dir ) as $name ) {
+    $hidden  = 0;
+    foreach ( (array) @scandir( $dir ) as $name ) {
         if ( '.' === $name || '..' === $name ) {
             continue;
         }
-        $entries[] = rmai_files_entry( $dir . DIRECTORY_SEPARATOR . $name );
+        $abs = $dir . DIRECTORY_SEPARATOR . $name;
+        if ( rmai_files_blocked( rmai_files_relpath( $abs ) ) ) {
+            $hidden++;
+            continue;
+        }
+        $entries[] = rmai_files_entry( $abs );
     }
     rmai_power_audit( 'GET /files/list', rmai_files_relpath( $dir ), 200 );
     return new WP_REST_Response( [
         'path'    => rmai_files_relpath( $dir ),
         'total'   => count( $entries ),
+        'hidden'  => $hidden,
         'entries' => $entries,
     ], 200 );
 }
@@ -6253,10 +6322,13 @@ function rmai_files_build_tree( string $dir, int $depth, int &$budget ): array {
         if ( '.' === $name || '..' === $name ) {
             continue;
         }
+        $abs = $dir . DIRECTORY_SEPARATOR . $name;
+        if ( rmai_files_blocked( rmai_files_relpath( $abs ) ) ) {
+            continue; // ni se muestra ni se recorre
+        }
         if ( $budget-- <= 0 ) {
             break;
         }
-        $abs   = $dir . DIRECTORY_SEPARATOR . $name;
         $entry = rmai_files_entry( $abs );
         if ( 'dir' === $entry['type'] && $depth > 0 ) {
             $entry['children'] = rmai_files_build_tree( $abs, $depth - 1, $budget );
@@ -6274,6 +6346,9 @@ function rmai_files_tree( WP_REST_Request $request ) {
     }
     if ( ! is_dir( $dir ) ) {
         return new WP_Error( 'rmai_not_dir', 'La ruta no es un directorio.', [ 'status' => 400 ] );
+    }
+    if ( rmai_files_blocked( rmai_files_relpath( $dir ) ) ) {
+        return rmai_files_blocked_error();
     }
     $depth  = max( 0, min( 6, (int) $request->get_param( 'depth' ) ?: 2 ) );
     $budget = RMAI_FILES_NODE_MAX;
@@ -6295,6 +6370,10 @@ function rmai_files_read( WP_REST_Request $request ) {
     }
     if ( ! is_file( $file ) ) {
         return new WP_Error( 'rmai_not_file', 'La ruta no es un fichero.', [ 'status' => 400 ] );
+    }
+    if ( rmai_files_blocked( rmai_files_relpath( $file ) ) ) {
+        rmai_power_audit( 'GET /files/read', 'BLOQUEADO ' . rmai_files_relpath( $file ), 403 );
+        return rmai_files_blocked_error();
     }
     $size = (int) filesize( $file );
     if ( $size > RMAI_FILES_READ_MAX ) {
@@ -6327,6 +6406,9 @@ function rmai_files_search( WP_REST_Request $request ) {
     if ( ! is_dir( $root ) ) {
         return new WP_Error( 'rmai_not_dir', 'La ruta base no es un directorio.', [ 'status' => 400 ] );
     }
+    if ( rmai_files_blocked( rmai_files_relpath( $root ) ) ) {
+        return rmai_files_blocked_error();
+    }
     $name     = (string) $request->get_param( 'name' );
     $contains = (string) $request->get_param( 'contains' );
     if ( '' === $name && '' === $contains ) {
@@ -6336,8 +6418,15 @@ function rmai_files_search( WP_REST_Request $request ) {
     $results = [];
     $budget  = RMAI_FILES_NODE_MAX;
     try {
+        // Las carpetas y ficheros protegidos se podan antes de entrar: ni se
+        // listan ni se abren para buscar dentro (no sirven de oráculo).
         $it = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ),
+            new RecursiveCallbackFilterIterator(
+                new RecursiveDirectoryIterator( $root, FilesystemIterator::SKIP_DOTS ),
+                static function ( $current ) {
+                    return ! rmai_files_blocked( rmai_files_relpath( $current->getPathname() ) );
+                }
+            ),
             RecursiveIteratorIterator::LEAVES_ONLY
         );
         foreach ( $it as $fileinfo ) {

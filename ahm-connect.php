@@ -3,7 +3,7 @@
  * Plugin Name: AHM Connect
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
- * Version:     3.8.0-beta
+ * Version:     3.8.0
  * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RMAI_VERSION',         '3.8.0-beta' );
+define( 'RMAI_VERSION',         '3.8.0' );
 define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );
@@ -731,6 +731,7 @@ function rmai_settings_page(): void {
                     <?php
                     $endpoints8 = [
                         ['POST',  '/tools/flush-rewrite',      'Regenerar reglas de rewrite (sitemap 404, etc.)'],
+                        ['POST',  '/tools/flush-cache',        'Purgar caché (Elementor + LiteSpeed…); post_id opcional, sin él global'],
                     ];
                     foreach ( $endpoints8 as [$m,$p,$d] ) {
                         $mc = strtolower( $m );
@@ -6380,6 +6381,499 @@ function rmai_files_search( WP_REST_Request $request ) {
         'total'     => count( $results ),
         'truncated' => ( $budget <= 0 ),
         'results'   => $results,
+    ], 200 );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 20. PURGA DE CACHÉS TRAS ESCRIBIR (v3.8.0) — automática + /tools/flush-cache
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// La API escribe con update_post_meta() y similares, que no disparan
+// save_post: ni Elementor (CSS por post, element cache) ni LiteSpeed y
+// compañía se enteraban del cambio, y la web pública seguía sirviendo la
+// versión vieja hasta vaciar a mano "Elementor → Herramientas → Limpiar
+// archivos y datos" y "LiteSpeed → Purge All".
+//
+// Funcionamiento: durante cada petición de escritura (no GET) a este
+// namespace se registran los IDs de post que reciben cambios (meta, guardado,
+// términos). Al terminar el callback, si la respuesta es de éxito (< 400), se
+// purga cada post una vez con rmai_flush_post_cache() y se añade el campo
+// "cache_flushed" a la respuesta JSON. Así cualquier endpoint, presente o
+// futuro, purga sin tener que acordarse de llamarlo.
+//
+// Nada de esto puede tumbar la petición: cada purga va en su propio try/catch
+// y solo se llama a funciones/acciones que existen.
+//
+// Decisión Elementor (global vs post): para una página normal basta con
+// invalidar lo del propio post (_elementor_css + fichero post-{id}.css,
+// _elementor_element_cache y _elementor_page_assets); el element cache de
+// Elementor 4 se guarda por post, en meta del documento que lo contiene.
+// El clear_cache() global borra el CSS y la caché de TODOS los posts y obliga
+// a regenerarlos en las siguientes visitas, así que solo se usa cuando el
+// post tocado se pinta dentro de otros: plantillas de elementor_library
+// (cabecera, pie, single, popups, secciones/widgets globales) y el kit activo
+// (colores y tipografías globales). En esos casos también se purga entera la
+// caché de página (LiteSpeed, etc.), porque el cambio afecta a todas las URLs.
+
+/** Metas que no cuentan como "cambio de contenido" para la purga automática. */
+function rmai_cache_ignored_meta_keys(): array {
+    return [
+        '_edit_lock',
+        '_edit_last',
+        '_elementor_css',
+        '_elementor_element_cache',
+        '_elementor_page_assets',
+    ];
+}
+
+/** Estado del registro de posts tocados durante la petición actual. */
+function &rmai_cache_tracker(): array {
+    static $state = [ 'active' => false, 'ids' => [] ];
+    return $state;
+}
+
+/** Marca un post como modificado si el registro está activo. */
+function rmai_cache_mark_post( $post_id ): void {
+    $state =& rmai_cache_tracker();
+    if ( ! $state['active'] ) {
+        return;
+    }
+    $post_id = (int) $post_id;
+    if ( $post_id <= 0 ) {
+        return;
+    }
+    // Las revisiones y autoguardados no se sirven: cuenta el post padre, que
+    // wp_update_post() ya guarda por su lado.
+    if ( function_exists( 'wp_is_post_revision' ) && ( wp_is_post_revision( $post_id ) || wp_is_post_autosave( $post_id ) ) ) {
+        return;
+    }
+    $state['ids'][ $post_id ] = true;
+
+    // Una variación no tiene URL propia: lo que hay que purgar es el producto.
+    if ( 'product_variation' === get_post_type( $post_id ) ) {
+        $parent = (int) wp_get_post_parent_id( $post_id );
+        if ( $parent > 0 ) {
+            $state['ids'][ $parent ] = true;
+        }
+    }
+}
+
+function rmai_cache_on_meta_change( $meta_id, $object_id, $meta_key ): void {
+    if ( in_array( (string) $meta_key, rmai_cache_ignored_meta_keys(), true ) ) {
+        return;
+    }
+    rmai_cache_mark_post( $object_id );
+}
+add_action( 'added_post_meta', 'rmai_cache_on_meta_change', 10, 3 );
+add_action( 'updated_post_meta', 'rmai_cache_on_meta_change', 10, 3 );
+add_action( 'deleted_post_meta', 'rmai_cache_on_meta_change', 10, 3 );
+add_action( 'save_post', 'rmai_cache_mark_post', 10, 1 );
+add_action( 'edit_attachment', 'rmai_cache_mark_post', 10, 1 );
+add_action( 'set_object_terms', 'rmai_cache_mark_post', 10, 1 );
+
+/** Rutas de este namespace que no deben activar la purga automática. */
+function rmai_cache_route_excluded( string $route ): bool {
+    $prefix = '/' . RMAI_NAMESPACE;
+    if ( 0 !== strpos( $route, $prefix . '/' ) ) {
+        return true; // no es de este plugin
+    }
+    $rel = substr( $route, strlen( $prefix ) );
+    return 0 === strpos( $rel, '/tools/' ) || 0 === strpos( $rel, '/ahm-sites/' );
+}
+
+add_filter( 'rest_request_before_callbacks', 'rmai_cache_begin_tracking', 10, 3 );
+function rmai_cache_begin_tracking( $response, $handler, $request ) {
+    $state =& rmai_cache_tracker();
+    $state = [ 'active' => false, 'ids' => [] ];
+
+    if ( ! $request instanceof WP_REST_Request ) {
+        return $response;
+    }
+    $method = strtoupper( $request->get_method() );
+    if ( 'GET' === $method || 'HEAD' === $method || 'OPTIONS' === $method ) {
+        return $response;
+    }
+    if ( rmai_cache_route_excluded( (string) $request->get_route() ) ) {
+        return $response;
+    }
+    $state['active'] = true;
+    return $response;
+}
+
+add_filter( 'rest_request_after_callbacks', 'rmai_cache_finish_tracking', 10, 3 );
+function rmai_cache_finish_tracking( $response, $handler, $request ) {
+    $state =& rmai_cache_tracker();
+    if ( ! $state['active'] ) {
+        return $response;
+    }
+    $ids   = array_keys( $state['ids'] );
+    $state = [ 'active' => false, 'ids' => [] ]; // la purga no debe registrarse a sí misma
+
+    if ( empty( $ids ) || is_wp_error( $response ) ) {
+        return $response;
+    }
+    // Un dry_run nunca purga (no escribe nada, pero se blinda igualmente).
+    if ( $request instanceof WP_REST_Request && ! empty( $request->get_param( 'dry_run' ) ) ) {
+        return $response;
+    }
+    if ( $response instanceof WP_REST_Response && $response->get_status() >= 400 ) {
+        return $response;
+    }
+
+    $summary = rmai_flush_posts_cache( $ids );
+
+    if ( $response instanceof WP_REST_Response ) {
+        $data = $response->get_data();
+        if ( is_array( $data ) && ! isset( $data['cache_flushed'] ) ) {
+            $data['cache_flushed'] = $summary;
+            $response->set_data( $data );
+        }
+    } elseif ( is_array( $response ) && ! isset( $response['cache_flushed'] ) ) {
+        $response['cache_flushed'] = $summary;
+    }
+
+    return $response;
+}
+
+/**
+ * Ejecuta un paso de purga sin dejar que un fallo se propague. Si el paso
+ * devuelve false se considera "no aplicable" y no se anota.
+ */
+function rmai_cache_step( string $label, callable $fn, array &$purged, array &$errors ): void {
+    try {
+        if ( false !== $fn() ) {
+            $purged[] = $label;
+        }
+    } catch ( \Throwable $e ) {
+        $errors[] = $label . ': ' . $e->getMessage();
+    }
+}
+
+/** True si el post se pinta dentro de otras páginas (plantilla o kit de Elementor). */
+function rmai_is_elementor_global_post( int $post_id ): bool {
+    if ( 'elementor_library' === get_post_type( $post_id ) ) {
+        return true;
+    }
+    return $post_id === (int) get_option( 'elementor_active_kit' );
+}
+
+/**
+ * Purga todas las cachés conocidas de un post tras escribirlo.
+ *
+ * @return array{post_id:int, purged:string[], errors:string[], global:bool}
+ */
+function rmai_flush_post_cache( int $post_id ): array {
+    $purged = [];
+    $errors = [];
+    $global = false;
+
+    if ( $post_id <= 0 || ! get_post( $post_id ) ) {
+        return [ 'post_id' => $post_id, 'purged' => [], 'errors' => [ 'post no encontrado' ], 'global' => false ];
+    }
+
+    // Que la purga no se registre como cambio si se llama dentro de una petición.
+    $state      =& rmai_cache_tracker();
+    $was_active = $state['active'];
+    $state['active'] = false;
+
+    rmai_cache_step( 'wp:clean_post_cache', static function () use ( $post_id ) {
+        clean_post_cache( $post_id );
+    }, $purged, $errors );
+
+    // ── Elementor ──
+    $is_elementor = metadata_exists( 'post', $post_id, '_elementor_data' ) || rmai_is_elementor_post( $post_id );
+    if ( $is_elementor && class_exists( '\\Elementor\\Plugin' ) ) {
+        rmai_cache_step( 'elementor:post_meta_cache', static function () use ( $post_id ) {
+            delete_post_meta( $post_id, '_elementor_element_cache' );
+            delete_post_meta( $post_id, '_elementor_page_assets' );
+            delete_post_meta( $post_id, '_elementor_css' );
+        }, $purged, $errors );
+
+        rmai_cache_step( 'elementor:post_css', static function () use ( $post_id ) {
+            rmai_clear_elementor_post_css( $post_id );
+        }, $purged, $errors );
+
+        if ( rmai_is_elementor_global_post( $post_id ) ) {
+            $global = true;
+            rmai_cache_step( 'elementor:clear_cache', static function () {
+                if ( ! isset( \Elementor\Plugin::$instance->files_manager ) ) {
+                    return false;
+                }
+                \Elementor\Plugin::$instance->files_manager->clear_cache();
+            }, $purged, $errors );
+        }
+    }
+
+    if ( $global ) {
+        // Plantilla/kit: cambia todas las URLs, se purga toda la caché de página.
+        $page = rmai_flush_page_caches_global();
+        $purged = array_merge( $purged, $page['purged'] );
+        $errors = array_merge( $errors, $page['errors'] );
+    } else {
+        $page = rmai_flush_page_caches_post( $post_id );
+        $purged = array_merge( $purged, $page['purged'] );
+        $errors = array_merge( $errors, $page['errors'] );
+    }
+
+    $state['active'] = $was_active;
+
+    return [
+        'post_id' => $post_id,
+        'purged'  => array_values( array_unique( $purged ) ),
+        'errors'  => $errors,
+        'global'  => $global,
+    ];
+}
+
+/** Purga varios posts y devuelve un resumen compacto para la respuesta JSON. */
+function rmai_flush_posts_cache( array $post_ids ): array {
+    $post_ids = array_values( array_unique( array_filter( array_map( 'intval', $post_ids ) ) ) );
+    $purged   = [];
+    $errors   = [];
+    $global   = false;
+
+    foreach ( $post_ids as $id ) {
+        if ( ! get_post( $id ) ) {
+            continue; // borrado en esta misma petición (p. ej. variaciones)
+        }
+        $r      = rmai_flush_post_cache( $id );
+        $purged = array_merge( $purged, $r['purged'] );
+        foreach ( $r['errors'] as $err ) {
+            $errors[] = "#{$id} {$err}";
+        }
+        $global = $global || $r['global'];
+    }
+
+    return [
+        'post_ids' => array_values( array_filter( $post_ids, 'get_post' ) ),
+        'purged'   => array_values( array_unique( $purged ) ),
+        'global'   => $global,
+        'errors'   => $errors,
+    ];
+}
+
+/** Caché de página de un post (y de la portada si el post es la portada). */
+function rmai_flush_page_caches_post( int $post_id ): array {
+    $purged = [];
+    $errors = [];
+
+    $home_id   = (int) get_option( 'page_on_front' );
+    $blog_id   = (int) get_option( 'page_for_posts' );
+    $is_home   = ( $post_id > 0 && ( $post_id === $home_id || $post_id === $blog_id ) );
+    $home_url  = home_url( '/' );
+    $permalink = get_permalink( $post_id );
+
+    // LiteSpeed Cache
+    if ( has_action( 'litespeed_purge_post' ) ) {
+        rmai_cache_step( 'litespeed:post', static function () use ( $post_id ) {
+            do_action( 'litespeed_purge_post', $post_id );
+        }, $purged, $errors );
+        if ( $is_home && has_action( 'litespeed_purge_url' ) ) {
+            rmai_cache_step( 'litespeed:home', static function () use ( $home_url ) {
+                do_action( 'litespeed_purge_url', $home_url );
+            }, $purged, $errors );
+        }
+    }
+
+    // WP Rocket
+    if ( function_exists( 'rocket_clean_post' ) ) {
+        rmai_cache_step( 'wp-rocket:post', static function () use ( $post_id ) {
+            rocket_clean_post( $post_id );
+        }, $purged, $errors );
+        if ( $is_home && function_exists( 'rocket_clean_home' ) ) {
+            rmai_cache_step( 'wp-rocket:home', static function () {
+                rocket_clean_home();
+            }, $purged, $errors );
+        }
+    }
+
+    // W3 Total Cache
+    if ( function_exists( 'w3tc_flush_post' ) ) {
+        rmai_cache_step( 'w3tc:post', static function () use ( $post_id ) {
+            w3tc_flush_post( $post_id );
+        }, $purged, $errors );
+    }
+
+    // WP Super Cache
+    if ( function_exists( 'wp_cache_post_change' ) ) {
+        rmai_cache_step( 'wp-super-cache:post', static function () use ( $post_id ) {
+            wp_cache_post_change( $post_id );
+        }, $purged, $errors );
+    }
+
+    // SiteGround Optimizer
+    if ( function_exists( 'sg_cachepress_purge_cache' ) && $permalink ) {
+        rmai_cache_step( 'sg-optimizer:post', static function () use ( $permalink, $is_home, $home_url ) {
+            sg_cachepress_purge_cache( $permalink );
+            if ( $is_home ) {
+                sg_cachepress_purge_cache( $home_url );
+            }
+        }, $purged, $errors );
+    }
+
+    // WP Fastest Cache
+    if ( function_exists( 'wpfc_clear_post_cache_by_id' ) ) {
+        rmai_cache_step( 'wp-fastest-cache:post', static function () use ( $post_id ) {
+            wpfc_clear_post_cache_by_id( $post_id );
+        }, $purged, $errors );
+    }
+
+    // Cache Enabler
+    if ( has_action( 'cache_enabler_clear_page_cache_by_post' ) ) {
+        rmai_cache_step( 'cache-enabler:post', static function () use ( $post_id ) {
+            do_action( 'cache_enabler_clear_page_cache_by_post', $post_id );
+        }, $purged, $errors );
+    }
+
+    // Hummingbird
+    if ( has_action( 'wphb_clear_page_cache' ) ) {
+        rmai_cache_step( 'hummingbird:post', static function () use ( $post_id ) {
+            do_action( 'wphb_clear_page_cache', $post_id );
+        }, $purged, $errors );
+    }
+
+    // Breeze no expone purga por post: en la portada se purga entero.
+    if ( $is_home && has_action( 'breeze_clear_all_cache' ) ) {
+        rmai_cache_step( 'breeze:all', static function () {
+            do_action( 'breeze_clear_all_cache' );
+        }, $purged, $errors );
+    }
+
+    return [ 'purged' => $purged, 'errors' => $errors ];
+}
+
+/** Caché de página completa de todos los plugins conocidos. */
+function rmai_flush_page_caches_global(): array {
+    $purged = [];
+    $errors = [];
+
+    if ( has_action( 'litespeed_purge_all' ) ) {
+        rmai_cache_step( 'litespeed:all', static function () {
+            do_action( 'litespeed_purge_all' );
+        }, $purged, $errors );
+    }
+    if ( function_exists( 'rocket_clean_domain' ) ) {
+        rmai_cache_step( 'wp-rocket:all', static function () {
+            rocket_clean_domain();
+        }, $purged, $errors );
+    }
+    if ( function_exists( 'w3tc_flush_all' ) ) {
+        rmai_cache_step( 'w3tc:all', static function () {
+            w3tc_flush_all();
+        }, $purged, $errors );
+    }
+    if ( function_exists( 'wp_cache_clear_cache' ) ) {
+        rmai_cache_step( 'wp-super-cache:all', static function () {
+            wp_cache_clear_cache();
+        }, $purged, $errors );
+    }
+    if ( function_exists( 'sg_cachepress_purge_everything' ) ) {
+        rmai_cache_step( 'sg-optimizer:all', static function () {
+            sg_cachepress_purge_everything();
+        }, $purged, $errors );
+    }
+    if ( function_exists( 'wpfc_clear_all_cache' ) ) {
+        rmai_cache_step( 'wp-fastest-cache:all', static function () {
+            wpfc_clear_all_cache( true );
+        }, $purged, $errors );
+    }
+    if ( has_action( 'cache_enabler_clear_complete_cache' ) ) {
+        rmai_cache_step( 'cache-enabler:all', static function () {
+            do_action( 'cache_enabler_clear_complete_cache' );
+        }, $purged, $errors );
+    }
+    if ( has_action( 'wphb_clear_page_cache' ) ) {
+        rmai_cache_step( 'hummingbird:all', static function () {
+            do_action( 'wphb_clear_page_cache' );
+        }, $purged, $errors );
+    }
+    if ( has_action( 'breeze_clear_all_cache' ) ) {
+        rmai_cache_step( 'breeze:all', static function () {
+            do_action( 'breeze_clear_all_cache' );
+        }, $purged, $errors );
+    }
+    if ( has_action( 'rt_nginx_helper_purge_all' ) ) {
+        rmai_cache_step( 'nginx-helper:all', static function () {
+            do_action( 'rt_nginx_helper_purge_all' );
+        }, $purged, $errors );
+    }
+
+    return [ 'purged' => $purged, 'errors' => $errors ];
+}
+
+/** Purga global: Elementor completo + caché de página + caché de objetos. */
+function rmai_flush_global_cache(): array {
+    $purged = [];
+    $errors = [];
+
+    if ( class_exists( '\\Elementor\\Plugin' ) ) {
+        rmai_cache_step( 'elementor:clear_cache', static function () {
+            if ( ! isset( \Elementor\Plugin::$instance->files_manager ) ) {
+                return false;
+            }
+            \Elementor\Plugin::$instance->files_manager->clear_cache();
+        }, $purged, $errors );
+    }
+
+    $page   = rmai_flush_page_caches_global();
+    $purged = array_merge( $purged, $page['purged'] );
+    $errors = array_merge( $errors, $page['errors'] );
+
+    if ( function_exists( 'wp_cache_flush' ) ) {
+        rmai_cache_step( 'wp:object_cache', static function () {
+            wp_cache_flush();
+        }, $purged, $errors );
+    }
+
+    return [
+        'post_ids' => [],
+        'purged'   => array_values( array_unique( $purged ) ),
+        'global'   => true,
+        'errors'   => $errors,
+    ];
+}
+
+add_action( 'rest_api_init', 'rmai_register_cache_tools_route' );
+function rmai_register_cache_tools_route(): void {
+    register_rest_route( RMAI_NAMESPACE, '/tools/flush-cache', [
+        'methods'             => WP_REST_Server::CREATABLE,
+        'callback'            => 'rmai_tool_flush_cache',
+        'permission_callback' => 'rmai_check_permission',
+        'args'                => [
+            'post_id' => [
+                'type'     => 'integer',
+                'required' => false,
+            ],
+        ],
+    ] );
+}
+
+/**
+ * POST /tools/flush-cache  {post_id?}
+ *
+ * Con post_id purga solo ese post (Elementor del post + caché de página de su
+ * URL; si es plantilla o kit de Elementor, purga global). Sin post_id hace la
+ * purga global: equivale a "Elementor → Herramientas → Limpiar archivos y
+ * datos" + "LiteSpeed → Purge All" (y equivalentes de otros plugins).
+ */
+function rmai_tool_flush_cache( WP_REST_Request $request ) {
+    $post_id = (int) $request->get_param( 'post_id' );
+
+    if ( $post_id > 0 ) {
+        if ( ! get_post( $post_id ) ) {
+            return new WP_Error( 'rmai_not_found', 'Entrada no encontrada.', [ 'status' => 404 ] );
+        }
+        return new WP_REST_Response( [
+            'success'       => true,
+            'scope'         => 'post',
+            'cache_flushed' => rmai_flush_posts_cache( [ $post_id ] ),
+        ], 200 );
+    }
+
+    return new WP_REST_Response( [
+        'success'       => true,
+        'scope'         => 'global',
+        'cache_flushed' => rmai_flush_global_cache(),
     ], 200 );
 }
 

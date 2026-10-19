@@ -1,7 +1,7 @@
 # AHM Connect — Requisitos y documentación completa
 
 **Plugin:** AHM Connect  
-**Versión:** 3.8.0-beta  
+**Versión:** 3.8.0  
 **Namespace REST:** `ahm-connect/v1`  
 **Autenticación:** cabecera `X-RMAI-Key`  
 **Autor:** Aquí Hay Marketing · aquihaymarketing.es
@@ -29,7 +29,8 @@ API REST privada para gestionar desde herramientas externas (n8n, Make, scripts 
 - Auditar la calidad SEO de cada página contra los mismos checks de Rank Math
 - Detectar errores 404, problemas en el sitemap, H1 duplicados o ausentes, y páginas indexadas que no deben estarlo
 - Gestionar atributos y variaciones de productos WooCommerce
-- Herramientas de mantenimiento (regenerar reglas de reescritura sin acceso a wp-admin/SSH)
+- Herramientas de mantenimiento (regenerar reglas de reescritura y purgar cachés sin acceso a wp-admin/SSH)
+- Purga automática de Elementor y de la caché de página (LiteSpeed, WP Rocket...) tras cada escritura
 - Conexión opcional con el panel AHM-Sites, activable/desactivable
 
 **Qué no puede hacer:**
@@ -120,4 +121,4 @@ Si necesitas esa referencia, pídela al equipo de Aquí Hay Marketing.
 
 ---
 
-*Última actualización: octubre 2026 · v3.8.0-beta*
+*Última actualización: octubre 2026 · v3.8.0*

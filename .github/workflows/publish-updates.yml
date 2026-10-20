@@ -1,0 +1,138 @@
+# Publica AHM Connect en el servidor de actualizaciones privado
+# (connect.aquihaymarketing.es, cPanel artemisa) por FTPS.
+#
+# - push de un tag vX.Y.Z → comprueba versiones, construye el zip, genera
+#   manifest.json y sube release + ficheros del servidor.
+# - workflow_dispatch → sube solo los ficheros del servidor (public/ y
+#   private/lib.php, admin.php); marcando "release" sube también la versión
+#   actual del zip y el manifiesto.
+#
+# Nunca toca private/config.php ni private/data/ (registro de webs y logs).
+#
+# Secretos (Settings → Secrets and variables → Actions):
+#   UPDATES_FTP_HOST  host FTP de artemisa (el nombre del servidor, cuyo
+#                     certificado es válido; no un nombre proxied por Cloudflare)
+#   UPDATES_FTP_USER  cuenta FTP con raíz /home/aquihaymarketing/connect
+#   UPDATES_FTP_PASS  su contraseña
+# Variable opcional (Variables, no secreto):
+#   UPDATES_FTP_VERIFY_CERT = false  solo si el certificado del FTP no valida
+#                                    (ver server/README.md); por defecto true.
+
+name: Publicar actualizaciones
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Subir también el zip y manifest.json de la versión del repo'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-updates
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.release == true }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: openssl, mbstring, curl
+          coverage: none
+          tools: none
+
+      - name: Instalar lftp y zip
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp zip
+
+      - name: Comprobar secretos
+        env:
+          H: ${{ secrets.UPDATES_FTP_HOST }}
+          U: ${{ secrets.UPDATES_FTP_USER }}
+          P: ${{ secrets.UPDATES_FTP_PASS }}
+        run: |
+          [ -n "$H" ] && [ -n "$U" ] && [ -n "$P" ] || { echo "::error::Faltan UPDATES_FTP_HOST / UPDATES_FTP_USER / UPDATES_FTP_PASS"; exit 1; }
+
+      - name: Lint PHP
+        run: |
+          for f in ahm-connect.php server/private/*.php server/public/api/*.php server/bin/*.php; do
+            php -l "$f"
+          done
+
+      - name: Comprobar versión y construir
+        if: env.IS_RELEASE == 'true'
+        run: |
+          set -euo pipefail
+          VER_HEADER=$(grep -m1 '^ \* Version:' ahm-connect.php | tr -d ' ' | cut -d: -f2)
+          VER_CONST=$(grep -m1 "define( 'RMAI_VERSION'" ahm-connect.php | sed -E "s/.*'([0-9.]+)'.*/\1/")
+          VER_JSON=$(php -r 'echo json_decode(file_get_contents("ahm-connect.json"), true)["version"];')
+          echo "cabecera=$VER_HEADER  RMAI_VERSION=$VER_CONST  ahm-connect.json=$VER_JSON"
+          if [ "$VER_HEADER" != "$VER_CONST" ] || [ "$VER_HEADER" != "$VER_JSON" ]; then
+            echo "::error::Las versiones no coinciden"; exit 1
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ "${GITHUB_REF_NAME#v}" != "$VER_HEADER" ]; then
+            echo "::error::El tag $GITHUB_REF_NAME no coincide con la versión $VER_HEADER"; exit 1
+          fi
+          ./build.sh
+          mkdir -p upload
+          cp dist/ahm-connect.zip "upload/ahm-connect-$VER_HEADER.zip"
+          php server/bin/build-manifest.php ahm-connect.json dist/ahm-connect.zip > upload/manifest.json
+          echo "VERSION=$VER_HEADER" >> "$GITHUB_ENV"
+          sha256sum "upload/ahm-connect-$VER_HEADER.zip"
+
+      - name: Subir por FTPS
+        env:
+          FTP_HOST: ${{ secrets.UPDATES_FTP_HOST }}
+          FTP_USER: ${{ secrets.UPDATES_FTP_USER }}
+          LFTP_PASSWORD: ${{ secrets.UPDATES_FTP_PASS }}
+          VERIFY_CERT: ${{ vars.UPDATES_FTP_VERIFY_CERT || 'true' }}
+        run: |
+          set -euo pipefail
+          {
+            echo "set ftp:ssl-force true"
+            echo "set ftp:ssl-protect-data true"
+            echo "set ssl:verify-certificate $VERIFY_CERT"
+            echo "set ftp:passive-mode true"
+            echo "set net:max-retries 3"
+            echo "set net:timeout 30"
+            echo "set net:reconnect-interval-base 5"
+            echo "open --env-password -u \"$FTP_USER\" \"$FTP_HOST\""
+            # Carpetas (si ya existen, no es error).
+            echo "set cmd:fail-exit false"
+            echo "mkdir -p -f public/api private/releases"
+            echo "set cmd:fail-exit true"
+            # Servidor: public/ (landing, .htaccess, api/) y private/ (código).
+            # Sin --delete: nunca borra nada del servidor.
+            echo "mirror -R --no-perms --verbose server/public public"
+            echo "put -O private server/private/lib.php"
+            echo "put -O private server/private/admin.php"
+            echo "put -O private server/private/.htaccess"
+            echo "put -O private server/private/config.example.php"
+            if [ "$IS_RELEASE" = "true" ]; then
+              # Primero el zip; el manifiesto al final y por renombrado, para
+              # no anunciar nunca una versión cuyo zip aún no está.
+              echo "put -O private/releases upload/ahm-connect-$VERSION.zip"
+              echo "put upload/manifest.json -o private/releases/manifest.json.new"
+              echo "rm -f private/releases/manifest.json"
+              echo "mv private/releases/manifest.json.new private/releases/manifest.json"
+            fi
+            echo "ls -la private/releases"
+            echo "bye"
+          } > "$RUNNER_TEMP/deploy.lftp"
+          lftp -f "$RUNNER_TEMP/deploy.lftp"
+
+      - name: Comprobar que el servidor responde
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://connect.aquihaymarketing.es/api/update.php || true)
+          echo "GET /api/update.php sin firma → $code (esperado 401)"
+          [ "$code" = "401" ] || echo "::warning::Respuesta inesperada ($code). Revisa private/config.php y los logs."

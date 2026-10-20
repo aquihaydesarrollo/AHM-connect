@@ -3,3 +3,7 @@
 graphify-out/
 clientes/
 .agents/
+server/private/config.php
+server/private/data/
+server/private/releases/
+upload/

@@ -3,8 +3,8 @@
  * Plugin Name: AHM Connect
  * Plugin URI:  https://aquihaymarketing.es
  * Description: API REST segura para gestionar contenido, SEO con Rank Math, atributos y productos WooCommerce, y metadatos de páginas desde herramientas externas de automatización.
- * Version:     3.8.0
- * Update URI:  https://github.com/aquihaydesarrollo/AHM-connect
+ * Version:     3.8.1
+ * Update URI:  https://connect.aquihaymarketing.es
  * Author:      Aquí Hay Marketing
  * Author URI:  https://aquihaymarketing.es
  * License:     GPL-2.0+
@@ -15,7 +15,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'RMAI_VERSION',         '3.8.0' );
+define( 'RMAI_VERSION',         '3.8.1' );
 define( 'RMAI_OPTION_API_KEY',  'rmai_api_key' );
 define( 'RMAI_OPTION_SETTINGS', 'rmai_settings' );
 define( 'RMAI_OPTION_ENABLED',  'rmai_api_enabled' );
@@ -40,6 +40,11 @@ define( 'RMAI_OPTION_AHM_SITES_SITE_ID',   'rmai_ahm_sites_site_id' );   // int:
 define( 'RMAI_OPTION_AHM_SITES_SECRET',    'rmai_ahm_sites_secret' );    // string: secret HMAC (64 hex), sensible, autoload=no
 define( 'RMAI_OPTION_AHM_SITES_PANEL_URL', 'rmai_ahm_sites_panel_url' ); // string: URL base del panel
 define( 'RMAI_AHM_SITES_CRON_HOOK',        'rmai_ahm_sites_checkin_event' );
+
+// ── Actualizaciones privadas (v3.8.1) — servidor connect.aquihaymarketing.es ──
+define( 'RMAI_OPTION_UPDATE_SECRET', 'rmai_update_site_secret' ); // string: 64 hex, firma las consultas al servidor; sensible, nunca se muestra
+define( 'RMAI_OPTION_UPDATE_STATUS', 'rmai_update_status' );      // array: status/message/checked/clock_offset (lo pinta el panel)
+define( 'RMAI_UPDATE_REGISTER_HOOK', 'rmai_update_register_event' );
 
 // ── Power Tools (v3.8.0) — bloque no-RCE: Gutenberg, Skills, Design, ──────
 //    Elementor clásico, subida de medios y lectura de ficheros.
@@ -68,6 +73,12 @@ function rmai_activate(): void {
     if ( get_option( RMAI_OPTION_ENABLED ) === false ) {
         update_option( RMAI_OPTION_ENABLED, 1 );
     }
+    // Registro en el servidor de actualizaciones: en segundo plano (WP-Cron)
+    // para no retrasar la activación. Si no llega a correr, se registra en
+    // la primera consulta de actualizaciones.
+    if ( function_exists( 'rmai_updates_schedule_register' ) ) {
+        rmai_updates_schedule_register();
+    }
 }
 
 register_uninstall_hook( __FILE__, 'rmai_uninstall' );
@@ -83,6 +94,14 @@ function rmai_uninstall(): void {
     delete_option( RMAI_OPTION_AHM_SITES_PANEL_URL );
     delete_option( RMAI_OPTION_DESIGN );
     delete_option( RMAI_OPTION_SKILL_SEED );
+    delete_option( RMAI_OPTION_UPDATE_SECRET );
+    delete_option( RMAI_OPTION_UPDATE_STATUS );
+    delete_site_option( RMAI_OPTION_UPDATE_SECRET );
+    delete_site_option( RMAI_OPTION_UPDATE_STATUS );
+    delete_site_transient( 'rmai_update_manifest' );
+    delete_site_transient( 'rmai_update_register_lock' );
+    delete_site_transient( 'rmai_update_verify_window' );
+    wp_clear_scheduled_hook( RMAI_UPDATE_REGISTER_HOOK );
 }
 
 function rmai_generate_key(): string {
@@ -645,7 +664,10 @@ function rmai_settings_page(): void {
                 <dt>Rank Math</dt><dd><?php echo $rm_ver ? esc_html( $rm_ver ) : '<span class="ahmc-pill">No instalado</span>'; ?></dd>
                 <dt>WooCommerce</dt><dd><?php echo $wc_ver ? esc_html( $wc_ver ) : '<span class="ahmc-pill">No instalado</span>'; ?></dd>
                 <dt>Elementor</dt><dd><?php echo $el_ver ? esc_html( $el_ver ) : '<span class="ahmc-pill">No instalado</span>'; ?></dd>
+                <?php [ $upd_label, $upd_class, $upd_detail ] = rmai_updates_status_view(); ?>
+                <dt>Actualizaciones</dt><dd><span class="ahmc-pill <?php echo esc_attr( $upd_class ); ?>" title="<?php echo esc_attr( $upd_detail ); ?>"><?php echo esc_html( $upd_label ); ?></span></dd>
             </dl>
+            <p class="ahmc-mu" style="margin:8px 0 0;font-size:12px"><?php echo esc_html( $upd_detail ); ?></p>
         </section>
 
     </div>
@@ -876,7 +898,8 @@ function rmai_settings_page(): void {
                 <table class="ahmc-table"><tbody>
                     <tr><td class="ahmc-mono">RMAI_RATE_LIMIT</td><td class="ahmc-mu">Peticiones por minuto; manda sobre el panel</td></tr>
                     <tr><td class="ahmc-mono">RMAI_MEDIA_MAX_MB</td><td class="ahmc-mu">Tope de <code>/media/upload</code> (20 por defecto)</td></tr>
-                    <tr><td class="ahmc-mono">RMAI_DISABLE_UPDATES</td><td class="ahmc-mu">No actualizar desde el repositorio</td></tr>
+                    <tr><td class="ahmc-mono">RMAI_DISABLE_UPDATES</td><td class="ahmc-mu">No actualizar desde el servidor de actualizaciones</td></tr>
+                    <tr><td class="ahmc-mono">RMAI_UPDATE_SERVER</td><td class="ahmc-mu">Servidor de actualizaciones (por defecto connect.aquihaymarketing.es)</td></tr>
                     <tr><td class="ahmc-mono">RMAI_TRUSTED_PROXIES</td><td class="ahmc-mu">IPs de proxy de confianza (cabeceras de IP real)</td></tr>
                     <tr><td class="ahmc-mono">rmai_route_groups</td><td class="ahmc-mu">Filtro: forzar grupos <code>power</code> / <code>files</code></td></tr>
                     <tr><td class="ahmc-mono">rmai_files_blocked</td><td class="ahmc-mu">Filtro: proteger más rutas en <code>/files/*</code></td></tr>
@@ -6365,7 +6388,7 @@ function rmai_cache_route_excluded( string $route ): bool {
     $rel = substr( $route, strlen( $prefix ) );
     // /skills/* escribe en un CPT privado que no se pinta en la web: purgar
     // LiteSpeed/Elementor por eso solo gastaría tiempo.
-    return 0 === strpos( $rel, '/tools/' ) || 0 === strpos( $rel, '/ahm-sites/' ) || 0 === strpos( $rel, '/skills' );
+    return 0 === strpos( $rel, '/tools/' ) || 0 === strpos( $rel, '/ahm-sites/' ) || 0 === strpos( $rel, '/skills' ) || '/update-verify' === $rel;
 }
 
 add_filter( 'rest_request_before_callbacks', 'rmai_cache_begin_tracking', 10, 3 );
@@ -6765,43 +6788,239 @@ function rmai_tool_flush_cache( WP_REST_Request $request ) {
 }
 
 // ═══════════════════════════════════════════════════════
-// 12. ACTUALIZACIONES AUTOMÁTICAS
+// 12. ACTUALIZACIONES AUTOMÁTICAS (servidor privado, v3.8.1)
 // ═══════════════════════════════════════════════════════
 //
-// El plugin no vive en wordpress.org, así que WordPress no sabe por sí solo
-// que hay versiones nuevas. Aquí se le enseña a mirar un manifiesto JSON
-// publicado en el repositorio y a ofrecer "Actualizar" en Escritorio →
-// Plugins como con cualquier otro plugin.
+// El plugin no vive en wordpress.org. Desde la 3.8.1 las actualizaciones se
+// sirven desde un servidor propio, https://connect.aquihaymarketing.es, y
+// solo a webs autorizadas:
 //
-// Para publicar una versión nueva:
-//   1. subir RMAI_VERSION y la cabecera "Version:" de este archivo
-//   2. actualizar ahm-connect.json (version, download_url, changelog)
-//   3. crear la release en GitHub adjuntando ahm-connect.zip
+//   1. Registro. La web genera una vez un site_secret aleatorio (32 bytes,
+//      opción rmai_update_site_secret, nunca se muestra) y lo envía a
+//      /api/register.php con su home_url. El servidor comprueba que la web es
+//      quien dice ser llamando a GET /update-verify (abajo), que responde
+//      HMAC(site_secret, "verify|<reto>|<home_url>") solo durante los minutos
+//      en que hay un registro en curso. Dominios preaprobados → aprobada; el
+//      resto queda pendiente hasta que se apruebe en el servidor.
+//   2. Consulta. GET /api/update.php firmada con cabeceras X-AHMC-Site,
+//      X-AHMC-Timestamp y X-AHMC-Signature = HMAC-SHA256(site_secret,
+//      "GET|<ruta?query>|<timestamp>|<home_url>"). Si la web está aprobada,
+//      el servidor devuelve versión, changelog y download_url.
+//   3. Descarga. download_url también exige firma, así que el gancho
+//      upgrader_pre_download la descarga con cabeceras firmadas. Sirve igual
+//      para actualizar a mano, para las automáticas y desde MainWP (que lanza
+//      el actualizador estándar en la web hija).
 //
-// La URL del manifiesto se puede sobreescribir por sitio definiendo
-// RMAI_UPDATE_MANIFEST en wp-config.php (útil para probar en staging).
+// Se registra al activar, tras actualizar el plugin y, si hace falta, en la
+// primera consulta (es lo que ocurre al llegar desde la 3.8.0).
+//
+// RMAI_UPDATE_SERVER (y RMAI_UPDATE_MANIFEST, la URL de consulta) se pueden
+// redefinir en wp-config.php para probar contra otro servidor. Si
+// RMAI_UPDATE_MANIFEST apunta a un JSON estático como el antiguo de GitHub,
+// también funciona (la firma se ignora y el paquete se baja sin más).
 
-// Las webs que no deben actualizarse desde este repositorio (p. ej. el
-// paquete AHM Connect Heleo, que se actualiza a mano) definen en
-// wp-config.php o en su cargador, ANTES de cargar este archivo:
+// Las webs que no deben actualizarse desde el servidor (p. ej. el paquete
+// AHM Connect Heleo, que se actualiza a mano) definen en wp-config.php o en
+// su cargador, ANTES de cargar este archivo:
 //     define( 'RMAI_DISABLE_UPDATES', true );
-// y toda esta sección queda sin registrar: ni consulta el manifiesto ni
+// y toda esta sección queda sin registrar: ni se registra, ni consulta, ni
 // ofrece actualizaciones.
+
+/**
+ * Estado de las actualizaciones para el panel: [ etiqueta, clase de .ahmc-pill, detalle ].
+ * Nunca incluye el site_secret.
+ */
+function rmai_updates_status_view(): array {
+    if ( defined( 'RMAI_DISABLE_UPDATES' ) && RMAI_DISABLE_UPDATES ) {
+        return [ 'Desactivadas', '', 'RMAI_DISABLE_UPDATES está definida: esta web se actualiza a mano.' ];
+    }
+    $st      = get_site_option( RMAI_OPTION_UPDATE_STATUS, [] );
+    $status  = is_array( $st ) ? (string) ( $st['status'] ?? '' ) : '';
+    $checked = is_array( $st ) && ! empty( $st['checked'] ) ? sprintf( 'Última comprobación: %s.', wp_date( 'j M Y H:i', (int) $st['checked'] ) ) : '';
+    $map     = [
+        'approved' => [ 'Registrada', 'ok', 'Recibe las actualizaciones de AHM Connect.' ],
+        'pending'  => [ 'Pendiente de aprobación', 'warn', 'Registrada en el servidor; falta que Aquí Hay Marketing la apruebe.' ],
+        'revoked'  => [ 'Revocada', 'bad', 'El servidor ha retirado el acceso a las actualizaciones.' ],
+        'conflict' => [ 'Conflicto de registro', 'bad', 'El dominio ya está registrado con otra clave (¿reinstalación?). Hay que resolverlo en el servidor.' ],
+        'error'    => [ 'Sin conexión', 'warn', (string) ( $st['message'] ?? 'No se pudo contactar con el servidor de actualizaciones.' ) ],
+    ];
+    $v = $map[ $status ] ?? [ 'Sin registrar', '', 'Se registrará en la próxima comprobación de actualizaciones.' ];
+    $v[2] = trim( $v[2] . ' ' . $checked );
+    return $v;
+}
 
 if ( ! defined( 'RMAI_DISABLE_UPDATES' ) || ! RMAI_DISABLE_UPDATES ) {
 
+    if ( ! defined( 'RMAI_UPDATE_SERVER' ) ) {
+        define( 'RMAI_UPDATE_SERVER', 'https://connect.aquihaymarketing.es' );
+    }
     if ( ! defined( 'RMAI_UPDATE_MANIFEST' ) ) {
-        define( 'RMAI_UPDATE_MANIFEST', 'https://raw.githubusercontent.com/aquihaydesarrollo/AHM-connect/main/ahm-connect.json' );
+        define( 'RMAI_UPDATE_MANIFEST', RMAI_UPDATE_SERVER . '/api/update.php' );
     }
 
     define( 'RMAI_UPDATE_TRANSIENT', 'rmai_update_manifest' );
     define( 'RMAI_UPDATE_TTL',       12 * HOUR_IN_SECONDS );
 
+    /** home_url canónica con la que la web se identifica (la de la red en multisite). */
+    function rmai_updates_home_url(): string {
+        $url = is_multisite() ? network_home_url() : home_url();
+        $p   = wp_parse_url( $url );
+        if ( empty( $p['scheme'] ) || empty( $p['host'] ) ) {
+            return untrailingslashit( $url );
+        }
+        return strtolower( $p['scheme'] ) . '://' . strtolower( $p['host'] )
+            . ( isset( $p['port'] ) ? ':' . (int) $p['port'] : '' )
+            . untrailingslashit( $p['path'] ?? '' );
+    }
+
+    /** site_secret de esta web (64 hex). Se crea la primera vez; no se carga en autoload. */
+    function rmai_updates_secret(): string {
+        $secret = get_site_option( RMAI_OPTION_UPDATE_SECRET, '' );
+        if ( is_string( $secret ) && preg_match( '/^[a-f0-9]{64}$/', $secret ) ) {
+            return $secret;
+        }
+        $secret = bin2hex( random_bytes( 32 ) );
+        if ( is_multisite() ) {
+            update_site_option( RMAI_OPTION_UPDATE_SECRET, $secret );
+        } else {
+            delete_option( RMAI_OPTION_UPDATE_SECRET );
+            add_option( RMAI_OPTION_UPDATE_SECRET, $secret, '', 'no' );
+        }
+        return $secret;
+    }
+
+    function rmai_updates_set_status( string $status, string $message = '', ?int $clock_offset = null ): void {
+        $prev = get_site_option( RMAI_OPTION_UPDATE_STATUS, [] );
+        $data = [
+            'status'       => $status,
+            'message'      => $message,
+            'checked'      => time(),
+            'clock_offset' => null !== $clock_offset ? $clock_offset : (int) ( is_array( $prev ) ? ( $prev['clock_offset'] ?? 0 ) : 0 ),
+        ];
+        if ( is_multisite() ) {
+            update_site_option( RMAI_OPTION_UPDATE_STATUS, $data );
+        } elseif ( false === get_option( RMAI_OPTION_UPDATE_STATUS, false ) ) {
+            add_option( RMAI_OPTION_UPDATE_STATUS, $data, '', 'no' );
+        } else {
+            update_option( RMAI_OPTION_UPDATE_STATUS, $data );
+        }
+    }
+
+    /** Hora para firmar, corregida si el reloj de la web va desfasado respecto al servidor. */
+    function rmai_updates_now(): int {
+        $st = get_site_option( RMAI_OPTION_UPDATE_STATUS, [] );
+        return time() + (int) ( is_array( $st ) ? ( $st['clock_offset'] ?? 0 ) : 0 );
+    }
+
+    /** Cabeceras firmadas para una petición al servidor de actualizaciones. */
+    function rmai_updates_signed_headers( string $method, string $url ): array {
+        $p    = wp_parse_url( $url );
+        $path = ( $p['path'] ?? '/' ) . ( isset( $p['query'] ) ? '?' . $p['query'] : '' );
+        $ts   = (string) rmai_updates_now();
+        $home = rmai_updates_home_url();
+        $msg  = strtoupper( $method ) . '|' . $path . '|' . $ts . '|' . $home;
+        return [
+            'X-AHMC-Site'      => $home,
+            'X-AHMC-Timestamp' => $ts,
+            'X-AHMC-Signature' => hash_hmac( 'sha256', $msg, rmai_updates_secret() ),
+            'X-AHMC-Version'   => RMAI_VERSION,
+        ];
+    }
+
+    /** ¿Es un paquete de nuestro servidor (descarga firmada)? */
+    function rmai_updates_is_own_package( string $url ): bool {
+        $p = wp_parse_url( $url );
+        $s = wp_parse_url( RMAI_UPDATE_SERVER );
+        return ! empty( $p['host'] ) && ! empty( $s['host'] )
+            && strtolower( $p['host'] ) === strtolower( $s['host'] )
+            && ( $p['port'] ?? null ) === ( $s['port'] ?? null )
+            && '/api/download.php' === ( $p['path'] ?? '' );
+    }
+
+    function rmai_updates_schedule_register(): void {
+        if ( ! wp_next_scheduled( RMAI_UPDATE_REGISTER_HOOK ) ) {
+            wp_schedule_single_event( time() + 10, RMAI_UPDATE_REGISTER_HOOK );
+        }
+    }
+    add_action( RMAI_UPDATE_REGISTER_HOOK, function () {
+        rmai_updates_register( true );
+    } );
+
+    // Al llegar por actualización desde la 3.8.0 no hay activación: la primera
+    // visita al escritorio programa el registro (si nunca se ha intentado).
+    add_action( 'admin_init', function () {
+        if ( false === get_site_option( RMAI_OPTION_UPDATE_STATUS, false ) && ! get_site_transient( 'rmai_update_register_lock' ) ) {
+            rmai_updates_schedule_register();
+        }
+    } );
+
     /**
-     * Descarga el manifiesto remoto, cacheado para no consultar en cada carga.
+     * Registra (o refresca) la web en el servidor. Como mucho una vez por hora
+     * salvo $force. Devuelve el estado que da el servidor o null si falló.
+     */
+    function rmai_updates_register( bool $force = false ): ?string {
+        if ( ! $force && get_site_transient( 'rmai_update_register_lock' ) ) {
+            return null;
+        }
+        set_site_transient( 'rmai_update_register_lock', 1, HOUR_IN_SECONDS );
+
+        // Abre la ventana en la que /update-verify contesta al reto del servidor.
+        set_site_transient( 'rmai_update_verify_window', 1, 10 * MINUTE_IN_SECONDS );
+        $response = wp_remote_post( RMAI_UPDATE_SERVER . '/api/register.php', [
+            'timeout' => 30,
+            'headers' => [ 'Content-Type' => 'application/json', 'Accept' => 'application/json' ],
+            'body'    => wp_json_encode( [
+                'home_url'       => rmai_updates_home_url(),
+                'site_secret'    => rmai_updates_secret(),
+                'plugin_version' => RMAI_VERSION,
+                'wp_version'     => get_bloginfo( 'version' ),
+            ] ),
+        ] );
+        delete_site_transient( 'rmai_update_verify_window' );
+
+        if ( is_wp_error( $response ) ) {
+            rmai_updates_set_status( 'error', 'No se pudo contactar con el servidor de actualizaciones: ' . $response->get_error_message() );
+            return null;
+        }
+        $code = (int) wp_remote_retrieve_response_code( $response );
+        $data = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+        $st   = is_array( $data ) ? (string) ( $data['status'] ?? '' ) : '';
+        $off  = ( is_array( $data ) && isset( $data['server_time'] ) && is_numeric( $data['server_time'] ) ) ? (int) $data['server_time'] - time() : null;
+        if ( null !== $off && abs( $off ) < 60 ) {
+            $off = 0; // solo se corrige un desfase claro
+        }
+
+        if ( in_array( $st, [ 'approved', 'pending', 'revoked', 'conflict' ], true ) ) {
+            rmai_updates_set_status( $st, '', $off );
+            return $st;
+        }
+        rmai_updates_set_status( 'error', 'El servidor de actualizaciones respondió ' . $code . '.', $off );
+        return null;
+    }
+
+    /** GET /update-verify?challenge=<64 hex> — prueba de propiedad para el registro. */
+    add_action( 'rest_api_init', function () {
+        register_rest_route( RMAI_NAMESPACE, '/update-verify', [
+            'methods'             => WP_REST_Server::READABLE,
+            'permission_callback' => '__return_true', // solo responde con un registro en curso
+            'callback'            => function ( WP_REST_Request $request ) {
+                $challenge = (string) $request->get_param( 'challenge' );
+                if ( ! get_site_transient( 'rmai_update_verify_window' ) || ! preg_match( '/^[a-f0-9]{64}$/', $challenge ) ) {
+                    return new WP_Error( 'rest_no_route', 'No se ha encontrado ninguna ruta que coincida con la URL y el método de la solicitud.', [ 'status' => 404 ] );
+                }
+                $proof    = hash_hmac( 'sha256', 'verify|' . $challenge . '|' . rmai_updates_home_url(), rmai_updates_secret() );
+                $response = new WP_REST_Response( [ 'proof' => $proof ], 200 );
+                $response->header( 'Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0' );
+                return $response;
+            },
+        ] );
+    } );
+
+    /**
+     * Consulta firmada al servidor, cacheada para no consultar en cada carga.
      *
      * @param bool $force Ignora la caché (lo usa el enlace "Buscar actualizaciones").
-     * @return array|null Manifiesto decodificado, o null si no se pudo obtener.
+     * @return array|null Manifiesto (con download_url) si la web está aprobada; null si no.
      */
     function rmai_fetch_manifest( bool $force = false ): ?array {
         if ( ! $force ) {
@@ -6809,24 +7028,57 @@ if ( ! defined( 'RMAI_DISABLE_UPDATES' ) || ! RMAI_DISABLE_UPDATES ) {
             if ( is_array( $cached ) ) {
                 return $cached;
             }
-            // Un fallo se cachea en corto para no reintentar en cada pantalla.
+            // Un fallo o un "no aprobada" se cachea en corto para no reintentar en cada pantalla.
             if ( 'error' === $cached ) {
                 return null;
             }
         }
 
-        $response = wp_remote_get( RMAI_UPDATE_MANIFEST, [
-            'timeout' => 10,
-            'headers' => [ 'Accept' => 'application/json' ],
-        ] );
+        $request = function () {
+            return wp_remote_get( RMAI_UPDATE_MANIFEST, [
+                'timeout' => 15,
+                'headers' => array_merge( [ 'Accept' => 'application/json' ], rmai_updates_signed_headers( 'GET', RMAI_UPDATE_MANIFEST ) ),
+            ] );
+        };
 
-        if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+        $response = $request();
+        $code     = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+
+        // 401: sin registrar, registro borrado en el servidor o reloj desfasado.
+        // Se (re)registra (como mucho una vez por hora) y se reintenta una vez.
+        if ( 401 === $code ) {
+            $st = rmai_updates_register( $force );
+            if ( null !== $st && 'conflict' !== $st ) {
+                $response = $request();
+                $code     = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+            }
+            if ( 401 === $code ) {
+                $now = get_site_option( RMAI_OPTION_UPDATE_STATUS, [] );
+                if ( ! is_array( $now ) || ! in_array( $now['status'] ?? '', [ 'conflict', 'revoked' ], true ) ) {
+                    rmai_updates_set_status( 'error', 'El servidor rechazó la consulta firmada (revisa la hora del servidor de la web).' );
+                }
+            }
+        }
+
+        if ( 200 !== $code ) {
+            if ( 0 === $code || $code >= 500 ) {
+                rmai_updates_set_status( 'error', 'No se pudo contactar con el servidor de actualizaciones' . ( $code ? ' (HTTP ' . $code . ').' : '.' ) );
+            }
             set_site_transient( RMAI_UPDATE_TRANSIENT, 'error', HOUR_IN_SECONDS );
             return null;
         }
 
         $data = json_decode( wp_remote_retrieve_body( $response ), true );
-        if ( ! is_array( $data ) || empty( $data['version'] ) || empty( $data['download_url'] ) ) {
+        if ( ! is_array( $data ) ) {
+            set_site_transient( RMAI_UPDATE_TRANSIENT, 'error', HOUR_IN_SECONDS );
+            return null;
+        }
+
+        $status = (string) ( $data['status'] ?? 'approved' ); // un JSON estático (staging, GitHub) no trae status
+        if ( isset( $data['status'] ) ) {
+            rmai_updates_set_status( in_array( $status, [ 'approved', 'pending', 'revoked' ], true ) ? $status : 'error' );
+        }
+        if ( 'approved' !== $status || empty( $data['version'] ) || empty( $data['download_url'] ) ) {
             set_site_transient( RMAI_UPDATE_TRANSIENT, 'error', HOUR_IN_SECONDS );
             return null;
         }
@@ -6900,6 +7152,59 @@ if ( ! defined( 'RMAI_DISABLE_UPDATES' ) || ! RMAI_DISABLE_UPDATES ) {
     }, 10, 3 );
 
     /**
+     * Descarga autenticada. download_url() de WordPress no sabe firmar, así
+     * que los paquetes de nuestro servidor se bajan aquí con las cabeceras
+     * firmadas a un temporal; WordPress lo descomprime y lo borra después.
+     */
+    add_filter( 'upgrader_pre_download', function ( $reply, $package, $upgrader = null, $hook_extra = [] ) {
+        if ( false !== $reply || ! is_string( $package ) || ! rmai_updates_is_own_package( $package ) ) {
+            return $reply;
+        }
+
+        if ( is_object( $upgrader ) && isset( $upgrader->skin ) && method_exists( $upgrader->skin, 'feedback' ) ) {
+            $upgrader->skin->feedback( 'downloading_package', esc_html( $package ) );
+        }
+
+        $tmp = wp_tempnam( 'ahm-connect.zip' );
+        if ( ! $tmp ) {
+            return new WP_Error( 'rmai_download_failed', 'No se pudo crear un fichero temporal para la descarga.' );
+        }
+
+        $response = wp_remote_get( $package, [
+            'timeout'  => 300,
+            'stream'   => true,
+            'filename' => $tmp,
+            'headers'  => rmai_updates_signed_headers( 'GET', $package ),
+        ] );
+
+        $code = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+        if ( 200 !== $code ) {
+            @unlink( $tmp );
+            if ( 401 === $code || 403 === $code ) {
+                delete_site_transient( RMAI_UPDATE_TRANSIENT );
+            }
+            $why = is_wp_error( $response ) ? $response->get_error_message() : 'HTTP ' . $code;
+            return new WP_Error( 'rmai_download_failed', 'No se pudo descargar AHM Connect del servidor de actualizaciones (' . $why . ').' );
+        }
+
+        // Integridad: zip de verdad y, si el manifiesto lo trae, mismo sha256.
+        $fh    = @fopen( $tmp, 'rb' );
+        $magic = $fh ? (string) fread( $fh, 2 ) : '';
+        if ( $fh ) {
+            fclose( $fh );
+        }
+        $manifest = get_site_transient( RMAI_UPDATE_TRANSIENT );
+        parse_str( (string) wp_parse_url( $package, PHP_URL_QUERY ), $q );
+        $expected = ( is_array( $manifest ) && ( $manifest['version'] ?? '' ) === ( $q['v'] ?? '' ) ) ? (string) ( $manifest['package_sha256'] ?? '' ) : '';
+        if ( 'PK' !== $magic || ( '' !== $expected && ! hash_equals( strtolower( $expected ), hash_file( 'sha256', $tmp ) ) ) ) {
+            @unlink( $tmp );
+            return new WP_Error( 'rmai_download_corrupt', 'El paquete descargado de AHM Connect no es válido (comprobación de integridad fallida).' );
+        }
+
+        return $tmp;
+    }, 10, 4 );
+
+    /**
      * El zip de una release de GitHub se descomprime en una carpeta con el nombre
      * del tag (ahm-connect-3.6.0). WordPress necesita que se llame igual que la
      * carpeta instalada o crearía un plugin duplicado en vez de actualizar.
@@ -6922,10 +7227,19 @@ if ( ! defined( 'RMAI_DISABLE_UPDATES' ) || ! RMAI_DISABLE_UPDATES ) {
         return $source;
     }, 10, 4 );
 
-    /** Tras actualizar, tira la caché del manifiesto para no ofrecer la misma versión. */
+    /**
+     * Tras actualizar, tira la caché del manifiesto para no ofrecer la misma
+     * versión y, si se ha actualizado este plugin, programa un registro para
+     * que el servidor vea la versión nueva.
+     */
     add_action( 'upgrader_process_complete', function ( $upgrader, $options ) {
         if ( 'update' === ( $options['action'] ?? '' ) && 'plugin' === ( $options['type'] ?? '' ) ) {
             delete_site_transient( RMAI_UPDATE_TRANSIENT );
+            $plugins = (array) ( $options['plugins'] ?? ( isset( $options['plugin'] ) ? [ $options['plugin'] ] : [] ) );
+            if ( in_array( plugin_basename( __FILE__ ), $plugins, true ) ) {
+                delete_site_transient( 'rmai_update_register_lock' );
+                rmai_updates_schedule_register();
+            }
         }
     }, 10, 2 );
 
@@ -6945,6 +7259,11 @@ if ( ! defined( 'RMAI_DISABLE_UPDATES' ) || ! RMAI_DISABLE_UPDATES ) {
         }
         check_admin_referer( 'rmai_check_update' );
 
+        // Si aún no está aprobada, se reintenta el registro (p. ej. tras aprobarla en el servidor).
+        $st = get_site_option( RMAI_OPTION_UPDATE_STATUS, [] );
+        if ( ! is_array( $st ) || 'approved' !== ( $st['status'] ?? '' ) ) {
+            rmai_updates_register( true );
+        }
         delete_site_transient( RMAI_UPDATE_TRANSIENT );
         rmai_fetch_manifest( true );
         delete_site_transient( 'update_plugins' );

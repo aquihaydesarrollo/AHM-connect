@@ -1,7 +1,7 @@
 # AHM Connect — Requisitos y documentación completa
 
 **Plugin:** AHM Connect  
-**Versión:** 3.8.0  
+**Versión:** 3.8.1  
 **Namespace REST:** `ahm-connect/v1`  
 **Autenticación:** cabecera `X-RMAI-Key`  
 **Autor:** Aquí Hay Marketing · aquihaymarketing.es
@@ -75,20 +75,34 @@ add_filter( 'rmai_route_groups', fn( $g ) => array_merge( $g, [ 'files' => true 
 
 ### Actualizaciones
 
-Desde la 3.6.0 el plugin se actualiza solo: consulta `ahm-connect.json` de este
-repositorio y ofrece **Actualizar** en Escritorio → Plugins, como cualquier
-plugin de wordpress.org. Para forzar la comprobación sin esperar a la revisión
-de cada 12 h, usa el enlace **"Buscar actualizaciones"** en la fila del plugin.
+Desde la 3.8.1 las actualizaciones se sirven desde un servidor propio,
+`https://connect.aquihaymarketing.es`, y **solo a webs autorizadas**:
 
-Las webs que estén en una versión anterior a la 3.6.0 no llevan ese mecanismo:
-hay que subirles `dist/ahm-connect.zip` una vez a mano. Ver [RELEASING.md](RELEASING.md).
+1. La web genera una vez un `site_secret` aleatorio y se registra sola (al
+   activar el plugin, tras actualizarlo o en la primera comprobación).
+2. El servidor verifica que el dominio es de verdad esa web (reto firmado contra
+   `GET /wp-json/ahm-connect/v1/update-verify`, que solo responde durante el
+   registro) y la deja **aprobada** si el dominio está preaprobado o
+   **pendiente** si no.
+3. Las consultas y la descarga del zip van firmadas con HMAC-SHA256. La descarga
+   firmada se hace en `upgrader_pre_download`, así que funciona igual al
+   actualizar a mano, con las actualizaciones automáticas y desde MainWP.
 
-Para que una web **no** se actualice desde este repositorio (por ejemplo un
-paquete que se actualiza a mano), define en `wp-config.php`:
+El estado sale en **Ajustes → AHM Connect → Resumen → Sitio → Actualizaciones**
+(registrada / pendiente de aprobación / revocada). Para forzar la comprobación
+sin esperar a la revisión de cada 12 h, usa el enlace **"Buscar
+actualizaciones"** en la fila del plugin. El servidor y su instalación están
+documentados en [server/README.md](server/README.md); publicar versiones, en
+[RELEASING.md](RELEASING.md).
+
+Para que una web **no** se actualice desde el servidor (por ejemplo un paquete
+que se actualiza a mano), define en `wp-config.php`:
 
 ```php
 define( 'RMAI_DISABLE_UPDATES', true );
 ```
+
+Para probar contra otro servidor: `define( 'RMAI_UPDATE_SERVER', 'https://staging.example' );`
 
 ---
 
@@ -140,4 +154,4 @@ Si necesitas esa referencia, pídela al equipo de Aquí Hay Marketing.
 
 ---
 
-*Última actualización: octubre 2026 · v3.8.0*
+*Última actualización: octubre 2026 · v3.8.1*
